@@ -358,7 +358,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         albumOn = prefs.album && portrait && al != null && !al.isEmpty
         if (albumOn && al != null) {
             al.draw(canvas, System.currentTimeMillis(), w / 2f + dx * 0.5f, h * 0.165f + dy * 0.5f,
-                min(w * 0.46f, h * 0.21f), prefs.albumShape == 0, ALBUM_FRAME)
+                min(w * 0.42f, h * 0.19f), prefs.albumShape, prefs.albumFrame, prefs.mainColor())
         }
 
         // ۴) ساعت
@@ -382,7 +382,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
                 val cy = (when {
                     albumOn && style == STYLE_ANALOG_DIGITAL -> h * 0.42f
                     albumOn -> h * 0.45f                    // زیر آلبوم عکس
-                    style == STYLE_ANALOG_DIGITAL -> if (portrait) h * 0.30f else h * 0.25f
+                    style == STYLE_ANALOG_DIGITAL -> if (portrait) h * 0.31f else h * 0.25f
                     else -> if (portrait) h * 0.37f else h * 0.30f
                 }) + dy
                 when (style) {
@@ -403,7 +403,8 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         val portrait = h >= w
         val k = if (albumOn) 0.78f else 1f        // با آلبوم عکس، ساعت کمی کوچک‌تر
         return k * when {
-            style == STYLE_ANALOG_DIGITAL && portrait -> min(w * 0.33f, h * 0.16f)
+            // شکل اول (آنالوگ + دیجیتال): آنالوگ بزرگ ولی داخل صفحه (۸۰٪ پهنا، و جا برای دیجیتال و تاریخ)
+            style == STYLE_ANALOG_DIGITAL && portrait -> min(w * 0.40f, h * 0.185f)
             style == STYLE_ANALOG_DIGITAL -> min(h * 0.17f, w * 0.22f)
             portrait -> min(w * 0.40f, h * 0.23f)
             else -> min(h * 0.24f, w * 0.30f)
@@ -664,10 +665,11 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         timePaint.typeface = tfMedium
         timePaint.color = color
         timePaint.alpha = 255
-        fit(timePaint, fa("00:00"), if (preview) w * 0.62f else if (portrait) w * 0.80f else w * 0.36f,
-            if (preview) h * 0.14f else if (albumOn) h * 0.085f else if (portrait) h * 0.105f else h * 0.15f)
+        fit(timePaint, fa("00:00"), if (preview) w * 0.62f else if (portrait) w * 0.84f else w * 0.36f,
+            if (preview) h * 0.14f else if (albumOn) h * 0.085f else if (portrait) h * 0.12f else h * 0.15f)
         val fm = timePaint.fontMetrics
-        val base = top + timePaint.textSize * 0.15f - fm.ascent * 0.80f
+        // فاصلهٔ روشن بین ساعت آنالوگ و دیجیتال
+        val base = top + timePaint.textSize * (if (preview) 0.15f else 0.30f) - fm.ascent * 0.80f
         drawFixed(c, timeText(), cx, base, timePaint)
         var bottom = base + fm.descent * 0.3f
         if (hasSubLine()) {
@@ -773,7 +775,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         c.drawLine(cx - sx * tail, cy + sy * tail, cx + sx * len, cy - sy * len, strokePaint)
     }
 
-    /** تاریخ‌های انتخابی: اولی (با نام روز) درشت، بقیه در یک خط کوچک‌تر. */
+    /** تاریخ‌های انتخابی (شمسی، قمری، میلادی)؛ نام روز پیش از اولی. همه در یک سطر رسم می‌شوند. */
     private fun dateLines(): List<String> {
         val gy = cal.get(Calendar.YEAR); val gm = cal.get(Calendar.MONTH) + 1; val gd = cal.get(Calendar.DAY_OF_MONTH)
         val out = ArrayList<String>(3)
@@ -825,15 +827,13 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
             smallPaint.textSize = dateSize
             if (friday || hol != null) smallPaint.color = HOLIDAY_RED
             smallPaint.alpha = 235
-            c.drawText(if (compact && batt.isNotEmpty()) dates[0] + "   •   " + batt else dates[0], cx, y, smallPaint)
+            // شمسی، قمری و میلادی در یک سطر؛ اگر جا نشد، قلم کوچک‌تر می‌شود تا در پهنای صفحه جا شود
+            val line = dates.joinToString("  •  ") + (if (compact && batt.isNotEmpty()) "   •   $batt" else "")
+            val maxW = w * 0.94f
+            val tw = smallPaint.measureText(line)
+            if (tw > maxW) smallPaint.textSize = dateSize * maxW / tw
+            c.drawText(line, cx, y, smallPaint)
             smallPaint.color = color
-            if (dates.size > 1) {
-                y += dateSize * 1.05f
-                smallPaint.typeface = tfLight
-                smallPaint.textSize = dateSize * 0.72f
-                smallPaint.alpha = 210
-                c.drawText(dates.drop(1).joinToString("   •   "), cx, y, smallPaint)
-            }
             if (hol != null) {
                 y += base * 1.25f
                 smallPaint.typeface = tfLight

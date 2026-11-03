@@ -42,11 +42,8 @@ class SettingsActivity : Activity() {
     private lateinit var prefs: Prefs
     private lateinit var preview: ClockView
     private lateinit var sunInfo: TextView
-    private lateinit var hijriInfo: TextView
     private lateinit var roosterInfo: TextView
     private lateinit var roosterSound: TextView
-    private lateinit var adhanInfo: TextView
-    private lateinit var adhanSound: TextView
     private lateinit var albumInfo: TextView
     private lateinit var albumMusicInfo: TextView
     private lateinit var gpsSwitch: Switch
@@ -96,7 +93,7 @@ class SettingsActivity : Activity() {
         // پیش‌نمایش زنده
         // پیش‌نمایش زنده به شکل صفحهٔ گوشی (عمودی و کوچک، تا نوشته‌ها روی هم نیفتند)
         preview = ClockView(this).apply { keepScreenOn = false }
-        root.addView(preview, LinearLayout.LayoutParams(dp(150), dp(310)).apply {
+        root.addView(preview, LinearLayout.LayoutParams(dp(200), dp(420)).apply {
             gravity = Gravity.CENTER_HORIZONTAL
             topMargin = dp(12); bottomMargin = dp(12)
         })
@@ -132,15 +129,15 @@ class SettingsActivity : Activity() {
 
         section(root, "نمایش")
         root.addView(switch("۲۴ ساعته", prefs.h24) { prefs.h24 = it; refresh() })
-        root.addView(switch("نمایش ثانیه در ساعت دیجیتال (ساعت عقربه‌ای همیشه عقربهٔ ثانیه دارد)", prefs.seconds) { prefs.seconds = it; refresh() })
+        root.addView(switch("نمایش ثانیه در ساعت دیجیتال (ساعت آنالوگ همیشه عقربهٔ ثانیه دارد)", prefs.seconds) { prefs.seconds = it; refresh() })
         root.addView(switch("اعداد فارسی", prefs.persianDigits) { prefs.persianDigits = it; refresh() })
         root.addView(switch("گوشی افقی: ساعت دیجیتال تمام‌صفحه (ساعت چپ، دقیقه راست)", prefs.landscapeBig) {
             prefs.landscapeBig = it; refresh()
         })
-        root.addView(hint("در حالت افقی، شکل «عقربه‌ای + دیجیتال درشت»: عقربه‌ای سمت راست و دیجیتال سمت چپ."))
+        root.addView(hint("در حالت افقی، شکل «آنالوگ + دیجیتال درشت»: آنالوگ سمت راست و دیجیتال سمت چپ."))
         root.addView(switch("درصد باتری", prefs.showBattery) { prefs.showBattery = it; refresh() })
         root.addView(switch("آب‌وهوای شهر (آیکون و دما، از اینترنت)", prefs.weather) { prefs.weather = it; refresh() })
-        root.addView(switch("قبله‌نما و قطب‌نما وسط ساعت عقربه‌ای", prefs.qibla) { prefs.qibla = it; refresh() })
+        root.addView(switch("قبله‌نما و قطب‌نما وسط ساعت آنالوگ", prefs.qibla) { prefs.qibla = it; refresh() })
         root.addView(hint("کعبه در جهت قبله و «ش» (مثلث قرمز) سمت شمال نشان داده می‌شود؛ با حسگر قطب‌نمای گوشی و موقعیت شهر. " +
             "وقتی گوشی رو به قبله است، خط قبله سبز می‌شود. گوشی را صاف و دور از آهن‌ربا و فلز نگه دارید."))
         root.addView(switch("اوقات شرعی زیر ساعت: اذان صبح و طلوع آفتاب (با زمان مانده)", prefs.showSunrise) {
@@ -148,51 +145,19 @@ class SettingsActivity : Activity() {
         })
 
         // ---------------- تاریخ ----------------
-        section(root, "تاریخ")
-        root.addView(switch("خورشیدی (شمسی)", prefs.showDate) { prefs.showDate = it; refresh() })
+        section(root, "تاریخ (همه در یک سطر)")
+        root.addView(switch("شمسی", prefs.showDate) { prefs.showDate = it; refresh() })
         root.addView(switch("قمری", prefs.showHijri) { prefs.showHijri = it; refresh() })
         root.addView(switch("میلادی", prefs.showGregorian) { prefs.showGregorian = it; refresh() })
-        hijriInfo = hint("")
-        root.addView(hijriInfo)
-        root.addView(seek("تصحیح تاریخ قمری", 0, 4, prefs.hijriOffset + 2, "", { v -> Persian.digits(
-            when { v - 2 > 0 -> "+${v - 2} روز"; v - 2 < 0 -> "${v - 2} روز"; else -> "بدون تصحیح" }) }) {
-            prefs.hijriOffset = it - 2; refresh()
-        })
-
-        // ---------------- آسمان ----------------
-        section(root, "آسمان: طلوع، غروب، خورشید و ماه")
-        root.addView(switch("سفیدی و سرخی صبح و طلوع خورشید", prefs.sunrise) { prefs.sunrise = it; refresh() })
-        root.addView(hint("از چند دقیقه پیش از طلوع (پیش‌فرض ۱۰ دقیقه) اول سفیدی ملایم صبح و بعد سرخی در افق پیدا می‌شود؛ " +
-            "سر وقت طلوع، خورشید از پشت افق درمی‌آید و تا ۲۰ دقیقه پس از طلوع آرام بالا می‌رود."))
-        root.addView(seek("شروع سفیدی صبح، چند دقیقه پیش از طلوع", 3, 40, prefs.dawnMinutes, "دقیقه") {
-            prefs.dawnMinutes = it; refresh()
-        })
-        root.addView(switch("سرخی غروب و فرو رفتن خورشید", prefs.sunsetFx) { prefs.sunsetFx = it; refresh() })
-        root.addView(switch("کمان کم‌رنگ مسیر خورشید بالای صفحه (با ساعت طلوع و غروب)", prefs.skyArc) {
-            prefs.skyArc = it; refresh()
-        })
-        root.addView(switch("جای خورشید در آسمان", prefs.sunPos) { prefs.sunPos = it; refresh() })
-        root.addView(switch("هلال ماه در آسمان", prefs.moon) { prefs.moon = it; refresh() })
-        root.addView(switch("آسمان نیمه‌شب (سرمه‌ای با ستاره) از ۲۰ دقیقه پیش از اذان صبح", prefs.nightSky) {
-            prefs.nightSky = it; refresh()
-        })
-
         // ---------------- اذان ----------------
         section(root, "🕌 پخش اذان")
         root.addView(spinner("اذان", arrayOf("خاموش", "شیعه — ۳ وقت (صبح، ظهر، مغرب)",
             "اهل سنت — ۵ وقت (صبح، ظهر، عصر، مغرب، عشا)"), prefs.adhanMode, green = true) {
             prefs.adhanMode = it; askNotifications(); Adhan.schedule(this); refresh()
         })
-        root.addView(switch("پیش از اذان، «اذان … به افق …» با صدا گفته شود", prefs.announceCity) { prefs.announceCity = it })
-        root.addView(hint("هنگام اذان، پنجره‌ای با «اذان … به افق شهر» و دکمه‌های «قطع» و «ادامهٔ اذان» باز می‌شود. " +
-            "گفتن نام شهر با صدا فقط وقتی کار می‌کند که موتور گفتار فارسی روی گوشی نصب باشد؛ وگرنه فقط اذان پخش می‌شود."))
         root.addView(switch("اهل سنت: عصر به مذهب حنفی (سایه دو برابر)", prefs.asrHanafi) {
             prefs.asrHanafi = it; Adhan.schedule(this); refresh()
         })
-        adhanInfo = hint("")
-        root.addView(adhanInfo)
-        adhanSound = hint("")
-        root.addView(adhanSound)
         root.addView(bigButton("🎵  انتخاب فایل اذان از گوشی") { pickAudio(REQ_ADHAN_FILE) })
         root.addView(bigButton("↩  اذان همراه برنامه") { prefs.adhanUri = ""; prefs.adhanUriName = ""; refresh() })
         root.addView(switch("لرزش گوشی هنگام اذان", prefs.adhanVibrate) { prefs.adhanVibrate = it })
@@ -243,7 +208,7 @@ class SettingsActivity : Activity() {
         section(root, "🖼 آلبوم عکس (اختیاری)")
         albumSwitch = switch("نمایش آلبوم عکس بالای صفحهٔ ساعت", prefs.album) { prefs.album = it; refresh() }
         root.addView(albumSwitch)
-        root.addView(hint("هر ۴ ثانیه یک عکس با افکت تصادفی؛ پس از آخرین عکس دوباره از اول. عکس‌ها کوچک‌شده در پوشهٔ خود " +
+        root.addView(hint("هر ۵ ثانیه یک عکس با افکت تصادفی؛ پس از آخرین عکس دوباره از اول. عکس‌ها کوچک‌شده در پوشهٔ خود " +
             "برنامه ذخیره می‌شوند و با به‌روزرسانی برنامه پاک نمی‌شوند. (در حالت افقی نمایش داده نمی‌شود.)"))
         albumInfo = hint("")
         root.addView(albumInfo)
@@ -254,7 +219,8 @@ class SettingsActivity : Activity() {
                 .setPositiveButton("پاک شود") { _, _ -> AlbumStore.clear(this); refresh() }
                 .setNegativeButton("نه", null).show()
         })
-        root.addView(spinner("قاب عکس", arrayOf("دایره", "مربع"), prefs.albumShape) { prefs.albumShape = it; refresh() })
+        root.addView(spinner("شکل قاب", Prefs.ALBUM_SHAPES, prefs.albumShape) { prefs.albumShape = it; refresh() })
+        root.addView(spinner("نوع قاب", Prefs.ALBUM_FRAMES, prefs.albumFrame) { prefs.albumFrame = it; refresh() })
         albumMusicSwitch = switch("موزیک پس‌زمینه هنگام نمایش آلبوم", prefs.albumMusic) { prefs.albumMusic = it; refresh() }
         root.addView(albumMusicSwitch)
         albumMusicInfo = hint("")
@@ -283,6 +249,10 @@ class SettingsActivity : Activity() {
                 startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))
             }
         })
+
+        section(root, "📤 اشتراک‌گذاری برنامه")
+        root.addView(bigButton("📤  فرستادن خود برنامه (فایل APK)") { Share.apk(this) })
+        root.addView(bigButton("🔗  فرستادن لینک دانلود") { Share.link(this) })
 
         section(root, "به‌روزرسانی")
         root.addView(hint("نسخهٔ نصب‌شده: " + Persian.digits(Updater.currentName(this)) +
@@ -364,26 +334,6 @@ class SettingsActivity : Activity() {
             day = "فردا"
         }
         val now2 = Calendar.getInstance()
-        val gy = now2.get(Calendar.YEAR); val gm = now2.get(Calendar.MONTH) + 1; val gd = now2.get(Calendar.DAY_OF_MONTH)
-        val hj = Hijri.fromGregorian(gy, gm, gd, prefs.hijriOffset)
-        val jj = Persian.toJalali(gy, gm, gd)
-        val hol = Hijri.holiday(jj[1], jj[2], hj)
-        hijriInfo.text = "امروز به قمری: " + Persian.digits("${hj[2]} ") + Hijri.months[hj[1] - 1] +
-            Persian.digits(" ${hj[0]}") + (if (hol != null) " — تعطیل: $hol" else "") +
-            "\nاگر با تقویم رسمی یک روز فرق داشت، با نوار زیر درستش کنید (تعطیلات مذهبی از روی همین حساب می‌شود)."
-
-        // اذان
-        val adhans = Adhan.upcoming(this, now).filter { it.ms > now }.sortedBy { it.ms }
-        adhanInfo.text = if (prefs.adhanMode == Prayers.MODE_OFF) "خاموش است."
-        else "اذان بعدی: " + (adhans.firstOrNull()?.let { "${it.name} ساعت ${hmOf(it.ms)}" } ?: "—") +
-            "\nحتی وقتی اپ بسته است هم پخش می‌شود؛ برای قطع، در اعلان «قطع» را بزنید. بلندی صدا = صدای «زنگ هشدار» گوشی."
-        val bundled = resources.getIdentifier(if (prefs.adhanMode == Prayers.MODE_SUNNI) "adhan_sunni" else "adhan_shia",
-            "raw", packageName) != 0
-        adhanSound.text = "صدای اذان: " + when {
-            prefs.adhanUri.isNotEmpty() -> "فایل انتخابی «${prefs.adhanUriName}»"
-            bundled -> "اذان همراه برنامه"
-            else -> "زنگ هشدار گوشی (فایل اذان همراه برنامه هنوز اضافه نشده؛ می‌توانید از گوشی انتخاب کنید)"
-        }
         albumInfo.text = "تعداد عکس‌های آلبوم: " + Persian.digits(AlbumStore.count(this).toString())
         albumMusicInfo.text = "موزیک: " + (if (prefs.albumMusicUri.isNotEmpty()) "«${prefs.albumMusicName}»" else "انتخاب نشده")
         roosterSound.text = "صدا: " + if (prefs.roosterUri.isNotEmpty()) "فایل انتخابی «${prefs.roosterUriName}»" else "صدای خروس"
@@ -408,7 +358,7 @@ class SettingsActivity : Activity() {
 
     private fun styleGallery(): View {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        // اول ساعت عقربه‌ای پیش‌فرض، بعد بقیه
+        // اول ساعت آنالوگ پیش‌فرض، بعد بقیه
         val order = listOf(ClockView.STYLE_ANALOG_DIGITAL) + (0 until Prefs.STYLE_COUNT).filter { it != ClockView.STYLE_ANALOG_DIGITAL }
         for (i in order) {
             val card = LinearLayout(this).apply {
@@ -758,12 +708,22 @@ class SettingsActivity : Activity() {
         })
     }
 
+    /**
+     * توضیح خاکستری. اگر بیشتر از یک سطر باشد، فقط سطر اول (با «…») نمایش داده می‌شود و با ضربه باز و بسته می‌شود.
+     */
     private fun hint(s: String) = TextView(this).apply {
         text = s
         textSize = 13f
         setTextColor(Color.rgb(0xA0, 0xA0, 0xA8))
         setPadding(0, dp(4), 0, dp(4))
         textDirection = View.TEXT_DIRECTION_RTL
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        setOnClickListener {
+            val open = maxLines == 1
+            maxLines = if (open) Int.MAX_VALUE else 1
+            ellipsize = if (open) null else android.text.TextUtils.TruncateAt.END
+        }
     }
 
     private fun bigButton(label: String, onClick: () -> Unit) = Button(this).apply {

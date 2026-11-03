@@ -30,6 +30,8 @@ import javax.net.ssl.SSLException
 object Updater {
     private const val BASE = "https://drive.denanex.ir/update/"
     private const val JSON_URL = BASE + "aod.json"
+    /** لینک دانلود آخرین نسخه (برای اشتراک‌گذاری). */
+    const val DOWNLOAD_URL = BASE + "aod.apk"
     private const val ACTION_STATUS = "com.denanex.aod.INSTALL_STATUS"
 
     class Info(val code: Long, val name: String, val apk: String, val notes: String)
