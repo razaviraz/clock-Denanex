@@ -1,0 +1,101 @@
+package com.denanex.aod
+
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
+import android.net.Uri
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+
+/** راهنمای کوتاه خواندن نماز شب (بدون اینترنت). */
+class GuideActivity : Activity() {
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(20), dp(24), dp(20), dp(32))
+        }
+        root.addView(TextView(this).apply {
+            text = "🌙 راهنمای نماز شب"
+            textSize = 24f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(0xFF, 0xD5, 0x80))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(16))
+        })
+        root.addView(TextView(this).apply {
+            text = TEXT
+            textSize = 18f
+            setLineSpacing(0f, 1.35f)
+            setTextColor(Color.rgb(0xEE, 0xEE, 0xF2))
+            textDirection = View.TEXT_DIRECTION_RTL
+        })
+        root.addView(Button(this).apply {
+            text = "توضیحات بیشتر در اینترنت"
+            isAllCaps = false
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://www.google.com/search?q=" + Uri.encode("طریقه خواندن نماز شب"))))
+                } catch (_: Exception) {}
+            }
+        })
+        root.addView(Button(this).apply {
+            text = "بازگشت"
+            isAllCaps = false
+            setOnClickListener { finish() }
+        })
+        root.addView(TextView(this).apply {
+            text = Prefs.CREDIT
+            textSize = 15f
+            setTextColor(Color.rgb(0xA0, 0xA0, 0xA8))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(20), 0, 0)
+        })
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(Color.rgb(0x05, 0x0A, 0x1E))
+            addView(root)
+        })
+    }
+
+    companion object {
+        val TEXT = """
+نماز شب ۱۱ رکعت است و مانند نماز صبح، دو رکعت دو رکعت خوانده می‌شود.
+
+⏰ وقت: از نیمه‌شب شرعی تا اذان صبح؛ بهترین وقت آن، نزدیک اذان صبح (سحر) است.
+
+۱) نافلهٔ شب — ۸ رکعت
+چهار نماز دو رکعتی. نیت هر کدام: «دو رکعت نافلهٔ شب می‌خوانم قربةً الی الله».
+در هر رکعت سورهٔ حمد (و اگر خواستید یک سوره)، و در رکعت دوم قنوت.
+
+۲) نماز شَفع — ۲ رکعت
+نیت: «دو رکعت نماز شفع می‌خوانم قربةً الی الله». مانند نماز صبح خوانده می‌شود (قنوت آن را به نیت رجاء می‌توان خواند).
+
+۳) نماز وَتر — ۱ رکعت
+نیت: «یک رکعت نماز وتر می‌خوانم قربةً الی الله».
+حمد (و در صورت تمایل سورهٔ توحید سه بار، فلق و ناس)، سپس دست‌ها به قنوت. در قنوت وتر مستحب است:
+• ۷۰ بار: «اَسْتَغْفِرُ اللهَ رَبّی وَ اَتوبُ اِلَیه»
+• ۷ بار: «هذا مَقامُ العائِذِ بِکَ مِنَ النّار»
+• ۳۰۰ بار: «اَلْعَفْو»
+• دعا و طلب آمرزش برای چهل مؤمن: «اَللّهُمَّ اغْفِرْ لِ...» (نام هر نفر)
+سپس رکوع، دو سجده، تشهد و سلام.
+
+📌 نکته‌ها
+• در همهٔ رکعت‌ها خواندن سورهٔ حمد به‌تنهایی کافی است.
+• نماز شب را نشسته هم می‌توان خواند.
+• اگر وقت کم است، می‌توان فقط شفع و وتر (۳ رکعت)، و اگر کمتر است فقط وتر را خواند.
+• قنوت‌ها و ذکرها مستحب‌اند؛ کوتاه‌تر هم خوانده شوند نماز درست است.
+• برای جزئیات به رسالهٔ مرجع تقلید خود مراجعه کنید.
+""".trim()
+    }
+}
