@@ -89,8 +89,10 @@ class SettingsActivity : Activity() {
         })
 
         // پیش‌نمایش زنده
+        // پیش‌نمایش زنده به شکل صفحهٔ گوشی (عمودی و کوچک، تا نوشته‌ها روی هم نیفتند)
         preview = ClockView(this).apply { keepScreenOn = false }
-        root.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(300)).apply {
+        root.addView(preview, LinearLayout.LayoutParams(dp(150), dp(310)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
             topMargin = dp(12); bottomMargin = dp(12)
         })
 
@@ -103,7 +105,12 @@ class SettingsActivity : Activity() {
         root.addView(bigButton("🌇  پیش‌نمایش غروب (حدود ۱ دقیقه)") {
             startActivity(Intent(this, AodActivity::class.java).putExtra(AodActivity.EXTRA_DEMO_SUNSET, true))
         })
-        root.addView(hint("در صفحهٔ ساعت: نگه داشتن = تنظیمات • دو ضربه = خروج • شکل ساعت فقط از همین‌جا عوض می‌شود"))
+        // ---------------- مکان ----------------
+        section(root, "📍 استان و شهر (افق شرعی، آب‌وهوا و قبله)")
+        root.addView(locationRows())
+        root.addView(bigButton("📍  تعیین شهر با GPS") { useMyLocation() })
+        sunInfo = hint("")
+        root.addView(sunInfo)
 
         // ---------------- ظاهر ----------------
         section(root, "شکل ساعت")
@@ -114,8 +121,8 @@ class SettingsActivity : Activity() {
 
         section(root, "نمایش")
         root.addView(switch("۲۴ ساعته", prefs.h24) { prefs.h24 = it; refresh() })
-        root.addView(switch("نمایش ثانیه", prefs.seconds) { prefs.seconds = it; refresh() })
-        root.addView(switch("رقم‌های فارسی", prefs.persianDigits) { prefs.persianDigits = it; refresh() })
+        root.addView(switch("نمایش ثانیه در ساعت دیجیتال (ساعت عقربه‌ای همیشه عقربهٔ ثانیه دارد)", prefs.seconds) { prefs.seconds = it; refresh() })
+        root.addView(switch("اعداد فارسی", prefs.persianDigits) { prefs.persianDigits = it; refresh() })
         root.addView(switch("گوشی افقی: ساعت دیجیتال تمام‌صفحه (ساعت چپ، دقیقه راست)", prefs.landscapeBig) {
             prefs.landscapeBig = it; refresh()
         })
@@ -140,13 +147,6 @@ class SettingsActivity : Activity() {
             when { v - 2 > 0 -> "+${v - 2} روز"; v - 2 < 0 -> "${v - 2} روز"; else -> "بدون تصحیح" }) }) {
             prefs.hijriOffset = it - 2; refresh()
         })
-
-        // ---------------- مکان ----------------
-        section(root, "📍 استان و شهر (افق شرعی، آب‌وهوا و قبله)")
-        root.addView(locationRows())
-        root.addView(bigButton("📍  تعیین شهر با GPS") { useMyLocation() })
-        sunInfo = hint("")
-        root.addView(sunInfo)
 
         // ---------------- آسمان ----------------
         section(root, "آسمان: طلوع، غروب، خورشید و ماه")
@@ -253,6 +253,13 @@ class SettingsActivity : Activity() {
             setTextColor(Color.rgb(0xC8, 0xC8, 0xD0))
             gravity = Gravity.CENTER
             setPadding(0, dp(28), 0, 0)
+        })
+        root.addView(TextView(this).apply {
+            text = Prefs.DEDICATION
+            textSize = 14f
+            setTextColor(Color.rgb(0xC8, 0xC8, 0xD0))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, 0)
         })
         root.addView(TextView(this).apply {
             text = "نسخهٔ " + Persian.digits(Updater.currentName(this@SettingsActivity))
@@ -366,14 +373,8 @@ class SettingsActivity : Activity() {
                 setOnClickListener { prefs.style = i; refresh() }
             }
             val pv = ClockView(this, previewStyle = i)
-            card.addView(pv, LinearLayout.LayoutParams(dp(108), dp(132)))
-            card.addView(TextView(this).apply {
-                text = Prefs.styleNames[i]
-                textSize = 11f
-                setTextColor(Color.rgb(0xD0, 0xD0, 0xD8))
-                gravity = Gravity.CENTER
-                maxWidth = dp(112)
-            })
+            pv.contentDescription = Prefs.styleNames[i]
+            card.addView(pv, LinearLayout.LayoutParams(dp(104), dp(128)))
             // لمس روی خود نمونه هم انتخاب کند
             pv.setOnClickListener { prefs.style = i; refresh() }
             stylePreviews.add(pv)
@@ -435,7 +436,7 @@ class SettingsActivity : Activity() {
         val loc = prefs.location()
 
         provSpinner = Spinner(this)
-        provSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, provinces)
+        provSpinner.adapter = greenAdapter(provinces)
         val pIdx = provinces.indexOf(loc.province).coerceAtLeast(0)
         provSpinner.setSelection(pIdx, false)
         citySpinner = Spinner(this)
@@ -468,7 +469,7 @@ class SettingsActivity : Activity() {
     private fun fillCities(province: String, select: String?) {
         fillingCities = true
         cities = Cities.of(this, province)
-        citySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, cities.map { it.name })
+        citySpinner.adapter = greenAdapter(cities.map { it.name })
         val i = if (select == null) 0 else cities.indexOfFirst { it.name == select }.coerceAtLeast(0)
         citySpinner.setSelection(i, false)
         // انتخاب خودکار اسپینر بعد از این خط اجرا می‌شود؛ پس از آن دوباره گوش بده
@@ -487,6 +488,16 @@ class SettingsActivity : Activity() {
         if (pIdx >= 0) provSpinner.setSelection(pIdx, false)
         fillCities(c.province, c.name)
     }
+
+    /** فهرست کشویی که گزینهٔ انتخاب‌شده (روی خود اسپینر) را سبز فسفری ملایم نشان می‌دهد. */
+    private fun greenAdapter(items: List<String>) =
+        object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, items) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getView(position, convertView, parent)
+                (v as? TextView)?.setTextColor(SELECTED_GREEN)
+                return v
+            }
+        }
 
     private fun labeled(label: String, v: View): LinearLayout {
         val row = LinearLayout(this).apply {
@@ -707,5 +718,7 @@ class SettingsActivity : Activity() {
         private const val REQ_ROOSTER_FILE = 21
         private const val REQ_ADHAN_FILE = 22
         private const val IDLE_MS = 2 * 60_000L
+        /** سبز فسفری کم‌رنگ برای استان و شهر انتخاب‌شده. */
+        private val SELECTED_GREEN = Color.rgb(0x9C, 0xF0, 0x8A)
     }
 }

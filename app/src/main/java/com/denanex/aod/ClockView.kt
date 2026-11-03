@@ -199,7 +199,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         var delay: Long = when {
             demoActive -> 33L
             sunriseWindow(now) || sunsetWindow(now) -> 100L
-            prefs.seconds -> 1000L - now % 1000L
+            prefs.seconds || prefs.style >= 3 -> 1000L - now % 1000L   // عقربه‌ای: عقربهٔ ثانیه همیشه هست
             else -> 60_000L - now % 60_000L + 15L
         }
         // شروع آسمان نیمه‌شب، سفیدی صبح و غروب معمولاً وسط دقیقه است؛ از آن جا نمانیم
@@ -368,10 +368,10 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         cal.set(Calendar.SECOND, 30); cal.set(Calendar.MILLISECOND, 0)
         val color = prefs.mainColor()
         when (previewStyle) {
-            0 -> drawTimeLine(c, w / 2f, h * 0.48f, w * 0.88f, h * 0.30f, tfThin, color)
-            1 -> drawTimeLine(c, w / 2f, h * 0.48f, w * 0.88f, h * 0.30f, tfBlack, color)
-            2 -> drawStacked(c, w / 2f, h * 0.50f, w, h, color)
-            else -> drawAnalog(c, w / 2f, h * 0.40f, min(w, h) * 0.34f, color, previewStyle, w, h)
+            0 -> drawTimeLine(c, w / 2f, h * 0.48f, w * 0.74f, h * 0.24f, tfThin, color)
+            1 -> drawTimeLine(c, w / 2f, h * 0.48f, w * 0.74f, h * 0.24f, tfBlack, color)
+            2 -> drawStacked(c, w / 2f, h * 0.50f, w * 0.80f, h * 0.80f, color)
+            else -> drawAnalog(c, w / 2f, h * 0.38f, min(w, h) * 0.30f, color, previewStyle, w, h)
         }
     }
 
@@ -529,30 +529,31 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
      */
     private fun drawAnalog(c: Canvas, cx: Float, cy: Float, r: Float, color: Int, style: Int, w: Float, h: Float,
                            digitalBelow: Boolean = true): Float {
-        val sec = cal.get(Calendar.SECOND) + (if (prefs.seconds && !preview) cal.get(Calendar.MILLISECOND) / 1000f else 0f)
+        val sec = cal.get(Calendar.SECOND).toFloat()
         val minute = cal.get(Calendar.MINUTE) + sec / 60f
         val hour = (cal.get(Calendar.HOUR_OF_DAY) % 12) + minute / 60f
 
         when (style) {
             3, STYLE_ANALOG_DIGITAL -> { // کلاسیک: خط‌های دقیقه و ساعت + اعداد ۱۲، ۳، ۶، ۹
                 for (i in 0 until 60) {
+                    val quarter = i % 15 == 0          // ۱۲، ۳، ۶، ۹: برجسته‌تر
                     val big = i % 5 == 0
                     strokePaint.color = color
                     strokePaint.alpha = if (big) 255 else 120
-                    strokePaint.strokeWidth = if (big) r * 0.03f else r * 0.012f
+                    strokePaint.strokeWidth = when { quarter -> r * 0.055f; big -> r * 0.03f; else -> r * 0.012f }
                     val a = i * PI / 30
-                    val r1 = if (big) r * 0.86f else r * 0.93f
+                    val r1 = when { quarter -> r * 0.80f; big -> r * 0.86f; else -> r * 0.93f }
                     c.drawLine(cx + (sin(a) * r1).toFloat(), cy - (cos(a) * r1).toFloat(),
                         cx + (sin(a) * r).toFloat(), cy - (cos(a) * r).toFloat(), strokePaint)
                 }
-                numbers(c, cx, cy, r * 0.70f, r * 0.17f, color, intArrayOf(12, 3, 6, 9), tfLight)
+                numbers(c, cx, cy, r * 0.64f, r * 0.20f, color, intArrayOf(12, 3, 6, 9), tfMedium)
             }
             4 -> { // ساده: فقط نقطه‌ها
                 fillPaint.color = color
                 for (i in 0 until 12) {
                     val a = i * PI / 6
                     fillPaint.alpha = if (i % 3 == 0) 255 else 150
-                    val dot = if (i % 3 == 0) r * 0.045f else r * 0.022f
+                    val dot = if (i % 3 == 0) r * 0.065f else r * 0.022f    // ۱۲، ۳، ۶، ۹ برجسته‌تر
                     c.drawCircle(cx + (sin(a) * r * 0.95f).toFloat(), cy - (cos(a) * r * 0.95f).toFloat(), dot, fillPaint)
                 }
             }
@@ -561,8 +562,9 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
                 strokePaint.alpha = 90
                 strokePaint.strokeWidth = r * 0.012f
                 c.drawCircle(cx, cy, r, strokePaint)
-                val all = IntArray(12) { it + 1 }
-                numbers(c, cx, cy, r * 0.80f, r * 0.16f, color, all, tfMedium, forcePersian = true)
+                // ۱۲، ۳، ۶، ۹ درشت‌تر و پررنگ‌تر؛ بقیه کوچک‌تر
+                numbers(c, cx, cy, r * 0.80f, r * 0.15f, color, intArrayOf(1, 2, 4, 5, 7, 8, 10, 11), tfLight, forcePersian = true)
+                numbers(c, cx, cy, r * 0.78f, r * 0.21f, color, intArrayOf(12, 3, 6, 9), tfBlack, forcePersian = true)
             }
         }
 
@@ -572,11 +574,10 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         val thin = style == 4
         hand(c, cx, cy, hour * 30f, r * 0.52f, if (thin) r * 0.035f else r * 0.06f, color, 255)
         hand(c, cx, cy, minute * 6f, r * 0.80f, if (thin) r * 0.022f else r * 0.04f, color, 235)
-        if (prefs.seconds) {
-            val accent = Color.rgb(0xFF, 0x70, 0x43)
-            hand(c, cx, cy, sec * 6f, r * 0.88f, r * 0.012f, accent, 255, tail = r * 0.15f)
-            fillPaint.color = accent
-        } else fillPaint.color = color
+        // عقربهٔ ثانیه (همهٔ ساعت‌های عقربه‌ای)
+        val accent = Color.rgb(0xFF, 0x70, 0x43)
+        hand(c, cx, cy, sec * 6f, r * 0.88f, r * 0.012f, accent, 255, tail = r * 0.15f)
+        fillPaint.color = accent
         fillPaint.alpha = 255
         c.drawCircle(cx, cy, r * 0.05f, fillPaint)
         fillPaint.color = Color.BLACK
@@ -607,7 +608,8 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         timePaint.typeface = tfMedium
         timePaint.color = color
         timePaint.alpha = 255
-        fit(timePaint, fa("00:00"), if (portrait) w * 0.80f else w * 0.36f, if (portrait) h * 0.105f else h * 0.15f)
+        fit(timePaint, fa("00:00"), if (preview) w * 0.62f else if (portrait) w * 0.80f else w * 0.36f,
+            if (preview) h * 0.14f else if (portrait) h * 0.105f else h * 0.15f)
         val fm = timePaint.fontMetrics
         val base = top + timePaint.textSize * 0.15f - fm.ascent * 0.80f
         drawFixed(c, timeText(), cx, base, timePaint)
@@ -679,6 +681,14 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         c.drawRect(kx - k, ky - k * 0.55f, kx + k, ky - k * 0.25f, fillPaint)
         // در کعبه
         c.drawRect(kx + k * 0.25f, ky + k * 0.05f, kx + k * 0.6f, ky + k * 0.75f, fillPaint)
+        // نوشتهٔ «قبله» جلوی کعبه (کمی بیرون‌تر در همان جهت)
+        smallPaint.typeface = tfMedium
+        smallPaint.color = if (aligned) Color.rgb(0x7C, 0xFF, 0x9A) else KAABA_GOLD
+        smallPaint.alpha = 230
+        smallPaint.textSize = r * 0.095f
+        val lx = kx + (sin(aQ) * k * 2.7f).toFloat()
+        val ly = ky - (cos(aQ) * k * 2.7f).toFloat()
+        c.drawText("قبله", lx, ly + smallPaint.textSize * 0.35f, smallPaint)
     }
 
     private fun numbers(c: Canvas, cx: Float, cy: Float, rr: Float, size: Float, color: Int,
@@ -809,20 +819,15 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         }
     }
 
-    /** پایین صفحه (روی زمین سیاه): نام تهیه‌کننده و شمارهٔ نسخه. */
+    /** پایین صفحه (روی زمین سیاه): شمارهٔ نسخه. (نام تهیه‌کننده فقط در تنظیمات و راهنما.) */
     private fun drawFooter(c: Canvas, cx: Float, w: Float, h: Float) {
+        if (versionText.isEmpty()) return
         val base = min(w, h) * (if (h >= w) 0.042f else 0.034f)
-        val gap = h - horizonY
         smallPaint.typeface = tfLight
-        smallPaint.textSize = base * 0.8f
+        smallPaint.textSize = base * 0.62f
         smallPaint.color = Color.WHITE
-        smallPaint.alpha = 120
-        c.drawText(Prefs.CREDIT, cx, horizonY + gap * 0.50f, smallPaint)
-        if (versionText.isNotEmpty()) {
-            smallPaint.textSize = base * 0.62f
-            smallPaint.alpha = 95
-            c.drawText(versionText, cx, horizonY + gap * 0.80f, smallPaint)
-        }
+        smallPaint.alpha = 95
+        c.drawText(versionText, cx, horizonY + (h - horizonY) * 0.70f, smallPaint)
     }
 
     private fun hm(ms: Long): String {

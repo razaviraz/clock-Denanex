@@ -58,7 +58,7 @@ class GuideActivity : Activity() {
             setOnClickListener { finish() }
         })
         root.addView(TextView(this).apply {
-            text = Prefs.CREDIT
+            text = Prefs.CREDIT + "\n" + Prefs.DEDICATION
             textSize = 15f
             setTextColor(Color.rgb(0xA0, 0xA0, 0xA8))
             gravity = Gravity.CENTER

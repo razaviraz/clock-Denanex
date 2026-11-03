@@ -13,6 +13,7 @@ class Prefs(ctx: Context) {
         /** شمارهٔ شهر برای «موقعیت من» در نسخه‌های قبل (فقط برای انتقال تنظیم قدیمی). */
         private const val LEGACY_MY_LOCATION = -1
         const val CREDIT = "تهیه‌کننده: محمد رضوی‌نژاد — التماس دعا 🤲"
+        const val DEDICATION = "تقدیم به روح پاک سردار شهید سید جلال الدین توسلمند"
 
         val styleNames = arrayOf(
             "دیجیتال باریک",
