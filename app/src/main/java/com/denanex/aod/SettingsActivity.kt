@@ -93,13 +93,14 @@ class SettingsActivity : Activity() {
         root.addView(switch("رقم‌های فارسی", prefs.persianDigits) { prefs.persianDigits = it; refresh() })
         root.addView(switch("تاریخ خورشیدی", prefs.showDate) { prefs.showDate = it; refresh() })
         root.addView(switch("باتری", prefs.showBattery) { prefs.showBattery = it; refresh() })
-        root.addView(switch("اذان صبح و طلوع آفتاب (با زمان مانده)", prefs.showSunrise) { prefs.showSunrise = it; refresh() })
+        root.addView(switch("اوقات شرعی: اذان صبح و طلوع آفتاب (با زمان مانده و افق شهر)", prefs.showSunrise) { prefs.showSunrise = it; refresh() })
 
         section(root, "سفیدی صبح و طلوع آفتاب")
         root.addView(switch("نمایش سفیدی صبح و طلوع خورشید", prefs.sunrise) { prefs.sunrise = it; refresh() })
         root.addView(hint("از چند دقیقه پیش از طلوع (پیش‌فرض ۱۰ دقیقه) سفیدی ملایم صبح در افق پیدا می‌شود؛ " +
             "سر وقت طلوع، خورشید از پشت افق درمی‌آید و تا ۲۰ دقیقه پس از طلوع آرام بالا می‌رود."))
         root.addView(switch("هلال ماه بالای ساعت", prefs.moon) { prefs.moon = it; refresh() })
+        root.addView(switch("جای خورشید در آسمان، بالای ساعت", prefs.sunPos) { prefs.sunPos = it; refresh() })
         val cityNames = Cities.list.map { it.name } + "📍 موقعیت من (GPS)"
         val cityIndex = if (prefs.city == Prefs.CITY_MY_LOCATION) Cities.list.size else prefs.city
         val cityRow = spinner("افق شرعی شهر", cityNames.toTypedArray(), cityIndex) {

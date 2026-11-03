@@ -82,6 +82,9 @@ class ClockView(ctx: Context) : View(ctx) {
     // ماه (هر دقیقه یک بار حساب می‌شود)
     private var moonMinute = -1L
     private var moonInfo: SunCalc.Moon? = null
+    // جای خورشید (هر دقیقه یک بار حساب می‌شود)
+    private var sunMinute = -1L
+    private var sunInfo: SunCalc.SunPos? = null
     private val moonPath = Path()
     private val moonOval = RectF()
 
@@ -111,6 +114,8 @@ class ClockView(ctx: Context) : View(ctx) {
         versionText = Updater.currentName(context).let { if (it.isEmpty()) "" else "نسخهٔ " + Persian.digits(it) }
         cacheKey = ""
         batteryMinute = -1
+        moonMinute = -1
+        sunMinute = -1
         invalidate()
     }
 
@@ -238,13 +243,14 @@ class ClockView(ctx: Context) : View(ctx) {
             onSkyLevel?.invoke(level)
         }
 
-        // ۲) جابه‌جایی آرام هر دقیقه برای جلوگیری از سوختن صفحه
+        // ۲) جابه‌جایی خیلی آرام برای جلوگیری از سوختن صفحه: مسیر پیوسته (دورهٔ ۴۷ و ۳۱ دقیقه)،
+        //    هر دقیقه فقط چند پیکسل؛ نه پرش ناگهانی که لرزش به نظر برسد
         var dx = 0f
         var dy = 0f
         if (prefs.burnIn) {
             val m = (now / 60_000L).toDouble()
-            dx = (sin(m * 0.73) * w * 0.03).toFloat()
-            dy = (cos(m * 0.41) * h * 0.015).toFloat()
+            dx = (sin(m * 2 * PI / 47.0) * w * 0.025).toFloat()
+            dy = (cos(m * 2 * PI / 31.0) * h * 0.012).toFloat()
         }
         val portrait = h >= w
         val cx = w / 2f + dx
@@ -252,8 +258,10 @@ class ClockView(ctx: Context) : View(ctx) {
         val cy = (if (prefs.style == STYLE_ANALOG_DIGITAL) (if (portrait) h * 0.29f else h * 0.25f)
                   else (if (portrait) h * 0.36f else h * 0.30f)) + dy
 
-        // ۳) هلال ماه بالای ساعت
+        // ۳) هلال ماه و جای خورشید بالای ساعت
         if (prefs.moon) drawMoon(canvas, now, w, h, dx)
+        // هنگام نمایش طلوع، خورشید بزرگ روی افق هست؛ نشانهٔ کوچک بالا تا پایان آن نمایش داده نمی‌شود
+        if (prefs.sunPos && !(level > 0f && tMin >= 0f)) drawSunMarker(canvas, now, w, h, dx)
 
         cal.timeInMillis = now
         val color = prefs.mainColor()
@@ -296,26 +304,67 @@ class ClockView(ctx: Context) : View(ctx) {
         fit(timePaint, fa("00:00"), if (portrait) w * 0.88f else w * 0.55f, if (portrait) h * 0.20f else h * 0.30f)
         val fm = timePaint.fontMetrics
         val base = cy - (fm.ascent + fm.descent) / 2f
-        c.drawText(txt, cx, base, timePaint)
+        drawFixed(c, txt, cx, base, timePaint)
         var bottom = base + fm.descent * 0.3f
-        val sub = subLine()
-        if (sub.isNotEmpty()) {
+        if (hasSubLine()) {
             smallPaint.typeface = tfLight
             smallPaint.color = color
             smallPaint.alpha = 200
             smallPaint.textSize = timePaint.textSize * 0.22f
             bottom += smallPaint.textSize * 1.25f
-            c.drawText(sub, cx, bottom, smallPaint)
+            drawSubLine(c, cx, bottom)
         }
         return bottom
     }
 
-    /** ثانیه و «ق.ظ/ب.ظ» (هر کدام فعال باشد) برای زیر ساعت دیجیتال. */
-    private fun subLine(): String {
-        val parts = ArrayList<String>(2)
-        if (!prefs.h24) parts.add(if (cal.get(Calendar.AM_PM) == Calendar.AM) "ق.ظ" else "ب.ظ")
-        if (prefs.seconds) parts.add(fa(two(cal.get(Calendar.SECOND))))
-        return parts.joinToString("   ")
+    private fun hasSubLine() = !prefs.h24 || prefs.seconds
+
+    /**
+     * ثانیه و «ق.ظ/ب.ظ» (هر کدام فعال باشد) زیر ساعت دیجیتال، با [smallPaint].
+     * ثانیه با رقم‌های هم‌پهنا رسم می‌شود تا با عوض شدن رقم، نوشته جابه‌جا نشود.
+     */
+    private fun drawSubLine(c: Canvas, cx: Float, y: Float) {
+        val ampm = if (prefs.h24) "" else (if (cal.get(Calendar.AM_PM) == Calendar.AM) "ق.ظ" else "ب.ظ")
+        val sec = if (prefs.seconds) fa(two(cal.get(Calendar.SECOND))) else ""
+        if (sec.isEmpty()) { c.drawText(ampm, cx, y, smallPaint); return }
+        if (ampm.isEmpty()) { drawFixed(c, sec, cx, y, smallPaint); return }
+        // راست به چپ: «ق.ظ» سمت راست، ثانیه سمت چپ
+        val a = smallPaint.measureText(ampm)
+        val s = fixedWidth(sec, smallPaint)
+        val gap = smallPaint.textSize * 1.2f
+        val left = cx - (a + gap + s) / 2f
+        drawFixed(c, sec, left + s / 2f, y, smallPaint)
+        c.drawText(ampm, left + s + gap + a / 2f, y, smallPaint)
+    }
+
+    /** پهنای یک خانهٔ رقم: پهنای پهن‌ترین رقم (لاتین و فارسی) با همین قلم. */
+    private fun digitCell(p: Paint): Float {
+        var m = 0f
+        for (ch in DIGITS) m = max(m, p.measureText(ch.toString()))
+        return m
+    }
+
+    /** پهنای نوشته وقتی هر رقم در خانهٔ هم‌پهنا رسم شود. */
+    private fun fixedWidth(s: String, p: Paint): Float {
+        val cell = digitCell(p)
+        var tw = 0f
+        for (ch in s) tw += if (ch in DIGITS) cell else p.measureText(ch.toString())
+        return tw
+    }
+
+    /**
+     * نوشتهٔ رقمی (مثل ۱۲:۴۵) را با خانه‌های هم‌پهنا وسط [cx] رسم می‌کند؛ با عوض شدن رقم‌ها
+     * پهنای کل و جای «:» ثابت می‌ماند و ساعت نمی‌لرزد. [p] باید textAlign = CENTER داشته باشد.
+     */
+    private fun drawFixed(c: Canvas, s: String, cx: Float, base: Float, p: Paint) {
+        val cell = digitCell(p)
+        var x = cx - fixedWidth(s, p) / 2f
+        for (ch in s) {
+            val str = ch.toString()
+            val cw = if (ch in DIGITS) cell else p.measureText(str)
+            c.drawText(str, x + cw / 2f, base, p)
+            x += cw
+        }
     }
 
     /** ساعت دوطبقه: ساعت بالا، دقیقه پایین؛ خیلی درشت (شبیه AOD سامسونگ). */
@@ -328,20 +377,19 @@ class ClockView(ctx: Context) : View(ctx) {
         val lineH = (fm.descent - fm.ascent) * 0.86f
         val top = cy - lineH
         timePaint.alpha = 255
-        c.drawText(fa(two(hourValue())), cx, top - fm.ascent * 0.92f, timePaint)
+        drawFixed(c, fa(two(hourValue())), cx, top - fm.ascent * 0.92f, timePaint)
         timePaint.alpha = 190
         val base2 = top + lineH - fm.ascent * 0.92f
-        c.drawText(fa(two(cal.get(Calendar.MINUTE))), cx, base2, timePaint)
+        drawFixed(c, fa(two(cal.get(Calendar.MINUTE))), cx, base2, timePaint)
         timePaint.alpha = 255
         var bottom = base2 + fm.descent * 0.3f
-        val sub = subLine()
-        if (sub.isNotEmpty()) {
+        if (hasSubLine()) {
             smallPaint.typeface = tfLight
             smallPaint.color = color
             smallPaint.alpha = 200
             smallPaint.textSize = timePaint.textSize * 0.18f
             bottom += smallPaint.textSize * 1.3f
-            c.drawText(sub, cx, bottom, smallPaint)
+            drawSubLine(c, cx, bottom)
         }
         return bottom
     }
@@ -351,7 +399,7 @@ class ClockView(ctx: Context) : View(ctx) {
         val portrait = h >= w
         val withDigital = style == STYLE_ANALOG_DIGITAL
         val r = when {
-            withDigital && portrait -> min(w * 0.34f, h * 0.17f)
+            withDigital && portrait -> min(w * 0.33f, h * 0.16f)
             withDigital -> min(h * 0.17f, w * 0.22f)
             portrait -> min(w * 0.40f, h * 0.23f)
             else -> min(h * 0.24f, w * 0.30f)
@@ -408,14 +456,19 @@ class ClockView(ctx: Context) : View(ctx) {
 
         if (withDigital) return drawBigDigitalUnder(c, cx, cy + r, w, h, color)
 
-        // زیر ساعت عقربه‌ای، ساعت دیجیتال کوچک
-        smallPaint.typeface = tfLight
+        // زیر ساعت عقربه‌ای، ساعت دیجیتال (درشت‌تر از قبل)
+        smallPaint.typeface = tfMedium
         smallPaint.color = color
-        smallPaint.alpha = 200
-        smallPaint.textSize = r * 0.20f
-        val base = cy + r + smallPaint.textSize * 1.4f
-        val ampm = if (prefs.h24) "" else "  " + (if (cal.get(Calendar.AM_PM) == Calendar.AM) "ق.ظ" else "ب.ظ")
-        c.drawText(fa(two(hourValue()) + ":" + two(cal.get(Calendar.MINUTE))) + ampm, cx, base, smallPaint)
+        smallPaint.alpha = 220
+        smallPaint.textSize = r * 0.30f
+        var base = cy + r + smallPaint.textSize * 1.25f
+        drawFixed(c, fa(two(hourValue()) + ":" + two(cal.get(Calendar.MINUTE))), cx, base, smallPaint)
+        if (!prefs.h24) {
+            smallPaint.typeface = tfLight
+            smallPaint.textSize = r * 0.15f
+            base += smallPaint.textSize * 1.4f
+            c.drawText(if (cal.get(Calendar.AM_PM) == Calendar.AM) "ق.ظ" else "ب.ظ", cx, base, smallPaint)
+        }
         return base
     }
 
@@ -425,19 +478,18 @@ class ClockView(ctx: Context) : View(ctx) {
         timePaint.typeface = tfMedium
         timePaint.color = color
         timePaint.alpha = 255
-        fit(timePaint, fa("00:00"), if (portrait) w * 0.62f else w * 0.30f, if (portrait) h * 0.085f else h * 0.13f)
+        fit(timePaint, fa("00:00"), if (portrait) w * 0.80f else w * 0.36f, if (portrait) h * 0.105f else h * 0.15f)
         val fm = timePaint.fontMetrics
-        val base = top + timePaint.textSize * 0.18f - fm.ascent * 0.80f
-        c.drawText(fa(two(hourValue()) + ":" + two(cal.get(Calendar.MINUTE))), cx, base, timePaint)
+        val base = top + timePaint.textSize * 0.15f - fm.ascent * 0.80f
+        drawFixed(c, fa(two(hourValue()) + ":" + two(cal.get(Calendar.MINUTE))), cx, base, timePaint)
         var bottom = base + fm.descent * 0.3f
-        val sub = subLine()
-        if (sub.isNotEmpty()) {
+        if (hasSubLine()) {
             smallPaint.typeface = tfLight
             smallPaint.color = color
             smallPaint.alpha = 200
-            smallPaint.textSize = timePaint.textSize * 0.24f
+            smallPaint.textSize = timePaint.textSize * 0.22f
             bottom += smallPaint.textSize * 1.2f
-            c.drawText(sub, cx, bottom, smallPaint)
+            drawSubLine(c, cx, bottom)
         }
         return bottom
     }
@@ -475,12 +527,14 @@ class ClockView(ctx: Context) : View(ctx) {
         smallPaint.color = color
         var y = top + base * 1.5f
 
-        // افق شرعی شهر، درست زیر ساعت
-        smallPaint.typeface = tfLight
-        smallPaint.textSize = base * 0.9f
-        smallPaint.alpha = 170
-        c.drawText("به افق " + prefs.location().name, cx, y, smallPaint)
-        y += big * 1.55f
+        // افق شرعی شهر، درست زیر ساعت (فقط وقتی اوقات شرعی نمایش داده می‌شود)
+        if (prefs.showSunrise) {
+            smallPaint.typeface = tfLight
+            smallPaint.textSize = base * 0.9f
+            smallPaint.alpha = 170
+            c.drawText("به افق " + prefs.location().name, cx, y, smallPaint)
+            y += big * 1.55f
+        } else y += big * 0.5f
 
         if (prefs.showDate) {
             val gy = cal.get(Calendar.YEAR); val gm = cal.get(Calendar.MONTH) + 1; val gd = cal.get(Calendar.DAY_OF_MONTH)
@@ -490,7 +544,7 @@ class ClockView(ctx: Context) : View(ctx) {
             val hol = Hijri.holiday(j[1], j[2], hj)
             val d = Persian.weekday(cal.get(Calendar.DAY_OF_WEEK)) + "  " +
                 fa(j[2].toString()) + " " + Persian.months[j[1] - 1] + " " + fa(j[0].toString())
-            val dateSize = big * 1.18f      // تاریخ خورشیدی کمی درشت‌تر
+            val dateSize = big * 1.45f      // تاریخ خورشیدی درشت
             y += dateSize - big
             smallPaint.typeface = tfMedium
             smallPaint.textSize = dateSize
@@ -505,7 +559,7 @@ class ClockView(ctx: Context) : View(ctx) {
                 c.drawText(hol, cx, y, smallPaint)
             }
             smallPaint.color = color
-            y += big * 1.45f
+            y += dateSize * 1.25f
         }
 
         if (prefs.showSunrise) {
@@ -522,11 +576,11 @@ class ClockView(ctx: Context) : View(ctx) {
         if (prefs.showBattery) {
             val b = battery(now)
             if (b.isNotEmpty()) {
-                // درصد باتری کمی درشت‌تر و روشن‌تر
+                // درصد باتری درشت و روشن
                 smallPaint.typeface = tfMedium
-                smallPaint.alpha = 190
-                smallPaint.textSize = base * 1.12f
-                y += base * 0.15f
+                smallPaint.alpha = 200
+                smallPaint.textSize = base * 1.5f
+                y += base * 0.45f
                 c.drawText(b, cx, y, smallPaint)
             }
         }
@@ -707,6 +761,47 @@ class ClockView(ctx: Context) : View(ctx) {
         return n
     }
 
+    /**
+     * نشانهٔ کوچک خورشید بالای صفحه، مثل ماه: جای افقی از سمت (شرق چپ، غرب راست)،
+     * ارتفاع از بالا بودن خورشید در آسمان. فقط وقتی خورشید بالای افق است.
+     */
+    private fun drawSunMarker(c: Canvas, now: Long, w: Float, h: Float, dx: Float) {
+        val minute = now / 60_000L
+        if (minute != sunMinute) {
+            sunMinute = minute
+            val loc = prefs.location()
+            sunInfo = try { SunCalc.sunPosition(now, loc.lat, loc.lon) } catch (_: Exception) { null }
+        }
+        val s = sunInfo ?: return
+        if (s.alt <= -0.5) return
+        val r = min(w, h) * 0.030f
+        val azN = (s.az / 110.0).coerceIn(-1.0, 1.0).toFloat()          // ‎-۱ شرق … ۰ جنوب … ۱ غرب
+        val altN = (s.alt / 75.0).coerceIn(0.0, 1.0).toFloat()
+        val sx = w * (0.5f + 0.40f * azN) + dx * 0.5f
+        val sy = if (h >= w) h * (0.090f - 0.055f * altN) else h * (0.11f - 0.065f * altN)
+        val core = Color.rgb(0xFF, 0xE7, 0x9A)
+        val edge = Color.rgb(0xFF, 0xB0, 0x40)
+        // هاله
+        skyPaint.shader = RadialGradient(sx, sy, r * 2.8f,
+            intArrayOf(withAlpha(edge, 0.35f), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+        c.drawCircle(sx, sy, r * 2.8f, skyPaint)
+        skyPaint.shader = null
+        // پرتوها
+        strokePaint.color = edge
+        strokePaint.alpha = 200
+        strokePaint.strokeWidth = max(1.5f, r * 0.16f)
+        for (i in 0 until 8) {
+            val a = i * PI / 4
+            val ca = cos(a).toFloat(); val sa = sin(a).toFloat()
+            c.drawLine(sx + ca * r * 1.35f, sy + sa * r * 1.35f, sx + ca * r * 1.85f, sy + sa * r * 1.85f, strokePaint)
+        }
+        // قرص
+        fillPaint.color = core
+        fillPaint.alpha = 245
+        c.drawCircle(sx, sy, r, fillPaint)
+        fillPaint.alpha = 255
+    }
+
     /** هلال ماه کوچک بالای ساعت؛ جای افقی از سمت (شرق چپ، غرب راست)، ارتفاع از بالا بودن ماه در آسمان. */
     private fun drawMoon(c: Canvas, now: Long, w: Float, h: Float, dx: Float) {
         val minute = now / 60_000L
@@ -773,6 +868,8 @@ class ClockView(ctx: Context) : View(ctx) {
         /** خورشید از ۳ تا ۲۰ دقیقه چند برابر شعاعش بالا برود. */
         const val SUN_RISE_RADII = 2.8f
         const val STYLE_ANALOG_DIGITAL = 6
+        /** رقم‌های لاتین و فارسی؛ برای رسم هم‌پهنا. */
+        const val DIGITS = "0123456789۰۱۲۳۴۵۶۷۸۹"
         val DAWN_DIM = Color.rgb(0x2A, 0x33, 0x46)
         val DAWN_WHITE = Color.rgb(0xEE, 0xEC, 0xE6)
         val DAWN_GOLD = Color.rgb(0xFF, 0xE2, 0xB4)

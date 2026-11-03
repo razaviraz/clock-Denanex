@@ -70,8 +70,12 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("show_battery", true)
         set(v) = sp.edit().putBoolean("show_battery", v).apply()
     var showSunrise: Boolean
-        get() = sp.getBoolean("show_sunrise", true)
+        get() = sp.getBoolean("show_sunrise", false)
         set(v) = sp.edit().putBoolean("show_sunrise", v).apply()
+    /** نشانهٔ کوچک خورشید بالای صفحه، در جای واقعی‌اش در آسمان (هر وقت خورشید بالای افق است). */
+    var sunPos: Boolean
+        get() = sp.getBoolean("sun_pos", true)
+        set(v) = sp.edit().putBoolean("sun_pos", v).apply()
 
     /** چند دقیقه پیش از طلوع، سفیدی ملایم صبح شروع شود. */
     var dawnMinutes: Int

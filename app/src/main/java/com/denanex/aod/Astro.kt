@@ -114,6 +114,25 @@ object SunCalc {
         return fromJulian(jNoon - (jSet - jNoon))
     }
 
+    // ---------------- جای خورشید ----------------
+
+    /** جای خورشید در آسمان: [alt] ارتفاع از افق (درجه)، [az] سمت از جنوب به غرب (درجه؛ منفی = شرق). */
+    class SunPos(val alt: Double, val az: Double)
+
+    fun sunPosition(ms: Long, lat: Double, lon: Double): SunPos {
+        val d = toDays(ms)
+        val m = RAD * (357.5291 + 0.98560028 * d)
+        val l = m + RAD * (1.9148 * sin(m) + 0.02 * sin(2 * m) + 0.0003 * sin(3 * m)) + RAD * 102.9372 + PI
+        val sDec = decl(l, 0.0)
+        val sRa = ra(l, 0.0)
+        val lw = RAD * -lon
+        val phi = RAD * lat
+        val h = RAD * (280.16 + 360.9856235 * d) - lw - sRa
+        val alt = asin(sin(phi) * sin(sDec) + cos(phi) * cos(sDec) * cos(h))
+        val az = atan2(sin(h), cos(h) * sin(phi) - tan(sDec) * cos(phi))
+        return SunPos(alt / RAD, az / RAD)
+    }
+
     // ---------------- ماه ----------------
 
     /** [alt] ارتفاع از افق (درجه)، [az] سمت از جنوب به غرب (درجه؛ منفی = شرق)، [phase] ۰ ماه نو، ۰٫۵ بدر، [fraction] بخش روشن. */
