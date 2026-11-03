@@ -57,6 +57,13 @@
             android:turnScreenOn="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
+        <!-- اشتراک‌گذاری خود فایل برنامه (فقط با مجوز موقت هنگام فرستادن) -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="com.denanex.aod.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <!-- راهنمای نماز شب، نماز آیات و نماز والدین -->
         <activity
             android:name=".GuideActivity"

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LightingColorFilter
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
@@ -88,7 +89,7 @@ object AlbumStore {
 }
 
 /**
- * نمایش اسلاید عکس‌ها: هر ۴ ثانیه عکس بعدی با یکی از افکت‌ها (تصادفی)، در قاب دایره یا مربع؛
+ * نمایش اسلاید عکس‌ها: هر ۵ ثانیه عکس بعدی با یکی از افکت‌ها (تصادفی)، در قاب دایره یا مربع؛
  * پس از آخرین عکس دوباره از اول. عکس بعدی پیشاپیش در پس‌زمینه خوانده می‌شود.
  */
 class AlbumPlayer(private val ctx: Context, private val onReady: () -> Unit) {
@@ -103,11 +104,15 @@ class AlbumPlayer(private val ctx: Context, private val onReady: () -> Unit) {
     private val rnd = Random()
     private var io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    // عکس‌ها کمی کم‌نورتر (حدود ۸۰٪) تا روی صفحهٔ تیره چشم را نزنند
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+        colorFilter = LightingColorFilter(0xCCCCCC, 0)
+    }
     private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val clip = Path()
     private val src = RectF()
-    private val dst = RectF()
+    private val box = RectF()
+    private val rr = RectF()
     private val m = Matrix()
 
     val isEmpty get() = files.isEmpty()
@@ -157,57 +162,96 @@ class AlbumPlayer(private val ctx: Context, private val onReady: () -> Unit) {
     }
 
     /**
-     * عکس فعلی را در مربع (مرکز [cx]، [cy]، ضلع [size]) رسم می‌کند؛ [circle] قاب دایره، وگرنه مربع با گوشهٔ گرد.
-     * [frameColor] رنگ قاب.
+     * عکس فعلی را در قاب رسم می‌کند؛ مرکز ([cx]، [cy]) و اندازهٔ پایهٔ [size].
+     * [shape]: ۰ دایره، ۱ مربع، ۲ مستطیل افقی، ۳ مستطیل عمودی، ۴ بیضی.
+     * [frameStyle]: ۰ طلایی، ۱ نقره‌ای، ۲ چوبی، ۳ سفید پهن، ۴ دوخطی رنگی ([accent])، ۵ بدون قاب.
+     * عکس‌ها کمی کم‌نورتر از اصل نمایش داده می‌شوند.
      */
-    fun draw(c: Canvas, now: Long, cx: Float, cy: Float, size: Float, circle: Boolean, frameColor: Int) {
+    fun draw(c: Canvas, now: Long, cx: Float, cy: Float, size: Float, shape: Int, frameStyle: Int, accent: Int) {
         if (files.isEmpty()) return
         if (now - shownAt >= SLIDE_MS && next != null) advance(now)
         val b = cur ?: return
-        val half = size / 2f
+        val (bw, bh) = when (shape) {
+            2 -> size * 1.35f to size * 0.90f
+            3 -> size * 0.80f to size * 1.10f
+            4 -> size * 1.25f to size * 0.90f
+            else -> size to size
+        }
+        box.set(cx - bw / 2f, cy - bh / 2f, cx + bw / 2f, cy + bh / 2f)
+        val corner = min(bw, bh) * 0.06f
         clip.reset()
-        if (circle) clip.addCircle(cx, cy, half, Path.Direction.CW)
-        else clip.addRoundRect(cx - half, cy - half, cx + half, cy + half, size * 0.06f, size * 0.06f, Path.Direction.CW)
+        when (shape) {
+            0 -> clip.addCircle(cx, cy, bw / 2f, Path.Direction.CW)
+            4 -> clip.addOval(box, Path.Direction.CW)
+            else -> clip.addRoundRect(box, corner, corner, Path.Direction.CW)
+        }
         val p = ((now - shownAt).toFloat() / TRANSITION_MS).coerceIn(0f, 1f)
         val e = p * p * (3f - 2f * p)
         c.save()
         c.clipPath(clip)
         c.drawColor(Color.BLACK)
         val pb = prev
-        if (e < 1f && pb != null) drawLayer(c, pb, cx, cy, size, 1f - e, outgoing = true)
-        drawLayer(c, b, cx, cy, size, e, outgoing = false)
+        if (e < 1f && pb != null) drawLayer(c, pb, cx, cy, 1f - e, outgoing = true)
+        drawLayer(c, b, cx, cy, e, outgoing = false)
         c.restore()
-        // قاب: حلقهٔ بیرونی پهن و حلقهٔ نازک درونی
-        frame.color = frameColor
-        frame.alpha = 230
-        frame.strokeWidth = size * 0.035f
-        val o = frame.strokeWidth / 2f
-        if (circle) c.drawCircle(cx, cy, half + o, frame)
-        else c.drawRoundRect(cx - half - o, cy - half - o, cx + half + o, cy + half + o, size * 0.07f, size * 0.07f, frame)
-        frame.alpha = 120
-        frame.strokeWidth = size * 0.008f
-        val i = size * 0.025f
-        if (circle) c.drawCircle(cx, cy, half - i, frame)
-        else c.drawRoundRect(cx - half + i, cy - half + i, cx + half - i, cy + half - i, size * 0.05f, size * 0.05f, frame)
+        drawFrame(c, shape, frameStyle, accent, min(bw, bh))
+    }
+
+    /** قاب دور [box] به شکل [shape]. */
+    private fun drawFrame(c: Canvas, shape: Int, style: Int, accent: Int, ref: Float) {
+        if (style == 5) return
+        val (outer, inner) = when (style) {
+            0 -> Color.rgb(0xE8, 0xC2, 0x5A) to Color.rgb(0xFF, 0xE9, 0xA8)   // طلایی
+            1 -> Color.rgb(0xC8, 0xCC, 0xD4) to Color.rgb(0xF2, 0xF4, 0xF8)   // نقره‌ای
+            2 -> Color.rgb(0x7A, 0x4A, 0x22) to Color.rgb(0xC2, 0x8A, 0x52)   // چوبی
+            3 -> Color.rgb(0xF4, 0xF2, 0xEC) to Color.TRANSPARENT              // سفید پهن
+            else -> accent to accent                                            // دوخطی رنگی
+        }
+        val outerW = ref * when (style) { 2 -> 0.075f; 3 -> 0.07f; 4 -> 0.012f; else -> 0.035f }
+        frame.color = outer
+        frame.alpha = 235
+        frame.strokeWidth = outerW
+        shapeStroke(c, shape, outerW / 2f)
+        if (inner != Color.TRANSPARENT) {
+            frame.color = inner
+            frame.alpha = if (style == 4) 235 else 130
+            frame.strokeWidth = ref * (if (style == 4) 0.012f else 0.008f)
+            // دوخطی: خط دوم بیرون‌تر با فاصله؛ بقیه: خط نازک درونی
+            shapeStroke(c, shape, if (style == 4) ref * 0.045f else -ref * 0.025f)
+        }
+    }
+
+    /** خط دور شکل، [off] پیکسل بیرون‌تر (مثبت) یا درون‌تر (منفی) از لبهٔ عکس. */
+    private fun shapeStroke(c: Canvas, shape: Int, off: Float) {
+        rr.set(box.left - off, box.top - off, box.right + off, box.bottom + off)
+        val corner = min(rr.width(), rr.height()) * 0.065f
+        when (shape) {
+            0 -> c.drawCircle(rr.centerX(), rr.centerY(), rr.width() / 2f, frame)
+            4 -> c.drawOval(rr, frame)
+            else -> c.drawRoundRect(rr, corner, corner, frame)
+        }
     }
 
     /**
      * یک لایهٔ عکس با افکت؛ [k] = ۰ تا ۱ (برای عکس تازه: پیشرفت آمدن، برای عکس قبلی: باقی‌ماندهٔ آن).
      * افکت‌ها: محو شدن، کشیدن از چپ/راست/پایین، بزرگ شدن، کوچک شدن، چرخش، ورق خوردن.
      */
-    private fun drawLayer(c: Canvas, b: Bitmap, cx: Float, cy: Float, size: Float, k: Float, outgoing: Boolean) {
-        // برش وسط عکس به شکل مربع
-        val s = min(b.width, b.height).toFloat()
-        src.set((b.width - s) / 2f, (b.height - s) / 2f, (b.width + s) / 2f, (b.height + s) / 2f)
-        dst.set(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f)
-        m.setRectToRect(src, dst, Matrix.ScaleToFit.FILL)
+    private fun drawLayer(c: Canvas, b: Bitmap, cx: Float, cy: Float, k: Float, outgoing: Boolean) {
+        // برش وسط عکس به نسبت قاب
+        val bw = box.width(); val bh = box.height()
+        val ar = bw / bh
+        var sw = b.width.toFloat(); var sh = b.height.toFloat()
+        if (sw / sh > ar) sw = sh * ar else sh = sw / ar
+        src.set((b.width - sw) / 2f, (b.height - sh) / 2f, (b.width + sw) / 2f, (b.height + sh) / 2f)
+        m.setRectToRect(src, box, Matrix.ScaleToFit.FILL)
+        val size = bw
         val inv = 1f - k
         paint.alpha = 255
         if (!outgoing) when (effect) {
             0 -> paint.alpha = (255 * k).toInt()                              // محو شدن
             1 -> m.postTranslate(-size * inv, 0f)                             // از چپ
             2 -> m.postTranslate(size * inv, 0f)                              // از راست
-            3 -> m.postTranslate(0f, size * inv)                              // از پایین
+            3 -> m.postTranslate(0f, bh * inv)                                // از پایین
             4 -> { m.postScale(0.3f + 0.7f * k, 0.3f + 0.7f * k, cx, cy); paint.alpha = (255 * k).toInt() } // بزرگ شدن
             5 -> { m.postScale(1.6f - 0.6f * k, 1.6f - 0.6f * k, cx, cy); paint.alpha = (255 * k).toInt() } // کوچک شدن
             6 -> { m.postRotate(-90f * inv, cx, cy); m.postScale(0.5f + 0.5f * k, 0.5f + 0.5f * k, cx, cy); paint.alpha = (255 * k).toInt() } // چرخش
@@ -216,7 +260,7 @@ class AlbumPlayer(private val ctx: Context, private val onReady: () -> Unit) {
             when (effect) {
                 1 -> m.postTranslate(size * (1f - k), 0f)
                 2 -> m.postTranslate(-size * (1f - k), 0f)
-                3 -> m.postTranslate(0f, -size * (1f - k))
+                3 -> m.postTranslate(0f, -bh * (1f - k))
                 7 -> m.postScale(max(0.02f, k), 1f, cx, cy)
                 else -> paint.alpha = (255 * k).toInt()
             }
@@ -232,7 +276,7 @@ class AlbumPlayer(private val ctx: Context, private val onReady: () -> Unit) {
     }
 
     companion object {
-        const val SLIDE_MS = 4000L
+        const val SLIDE_MS = 5000L
         const val TRANSITION_MS = 900L
         private const val EFFECTS = 8
     }

@@ -19,12 +19,15 @@ class Prefs(ctx: Context) {
             "دیجیتال باریک",
             "دیجیتال پررنگ",
             "دیجیتال دوطبقه (خیلی درشت)",
-            "عقربه‌ای کلاسیک",
-            "عقربه‌ای ساده (نقطه‌ای)",
-            "عقربه‌ای با اعداد فارسی",
-            "عقربه‌ای + دیجیتال درشت (اعداد انگلیسی)",
+            "آنالوگ کلاسیک",
+            "آنالوگ ساده (نقطه‌ای)",
+            "آنالوگ با اعداد فارسی",
+            "آنالوگ + دیجیتال درشت (اعداد انگلیسی)",
         )
         const val STYLE_COUNT = 7
+
+        val ALBUM_SHAPES = arrayOf("دایره", "مربع", "مستطیل افقی", "مستطیل عمودی", "بیضی")
+        val ALBUM_FRAMES = arrayOf("طلایی", "نقره‌ای", "چوبی", "سفید پهن", "دوخطی رنگی", "بدون قاب")
 
         val colorNames = arrayOf("سفید", "کرم", "کهربایی", "آبی آسمانی", "سبز ملایم", "صورتی", "قرمز (شب)", "سبز فسفری")
         val colorValues = intArrayOf(
@@ -75,7 +78,7 @@ class Prefs(ctx: Context) {
     }
 
     var style: Int
-        get() = sp.getInt("style", 6).coerceIn(0, STYLE_COUNT - 1)   // پیش‌فرض: عقربه‌ای + دیجیتال درشت
+        get() = sp.getInt("style", 6).coerceIn(0, STYLE_COUNT - 1)   // پیش‌فرض: آنالوگ + دیجیتال درشت
         set(v) = sp.edit().putInt("style", v).apply()
     var color: Int
         get() = sp.getInt("color", 0).coerceIn(0, colorValues.size - 1)
@@ -106,7 +109,7 @@ class Prefs(ctx: Context) {
     var weather: Boolean
         get() = sp.getBoolean("weather", true)
         set(v) = sp.edit().putBoolean("weather", v).apply()
-    /** قبله‌نما و قطب‌نما وسط ساعت عقربه‌ای (با حسگر گوشی). */
+    /** قبله‌نما و قطب‌نما وسط ساعت آنالوگ (با حسگر گوشی). */
     var qibla: Boolean
         get() = sp.getBoolean("qibla", true)
         set(v) = sp.edit().putBoolean("qibla", v).apply()
@@ -136,17 +139,21 @@ class Prefs(ctx: Context) {
 
     /** هنگام اذان، «اذان به افق …» با صدا گفته شود (اگر موتور گفتار فارسی روی گوشی باشد). */
     var announceCity: Boolean
-        get() = sp.getBoolean("announce_city", true)
+        get() = sp.getBoolean("announce_city", false)
         set(v) = sp.edit().putBoolean("announce_city", v).apply()
 
     // ---------------- آلبوم عکس ----------------
     var album: Boolean
         get() = sp.getBoolean("album", false)
         set(v) = sp.edit().putBoolean("album", v).apply()
-    /** ۰ دایره، ۱ مربع. */
+    /** شکل قاب: ۰ دایره، ۱ مربع، ۲ مستطیل افقی، ۳ مستطیل عمودی، ۴ بیضی. */
     var albumShape: Int
-        get() = sp.getInt("album_shape", 0).coerceIn(0, 1)
+        get() = sp.getInt("album_shape", 0).coerceIn(0, ALBUM_SHAPES.size - 1)
         set(v) = sp.edit().putInt("album_shape", v).apply()
+    /** نوع قاب: ۰ طلایی، ۱ نقره‌ای، ۲ چوبی، ۳ سفید پهن، ۴ دوخطی رنگی، ۵ بدون قاب. */
+    var albumFrame: Int
+        get() = sp.getInt("album_frame", 0).coerceIn(0, ALBUM_FRAMES.size - 1)
+        set(v) = sp.edit().putInt("album_frame", v).apply()
     var albumMusic: Boolean
         get() = sp.getBoolean("album_music", false)
         set(v) = sp.edit().putBoolean("album_music", v).apply()
