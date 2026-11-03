@@ -22,7 +22,7 @@ class Prefs(ctx: Context) {
             "عقربه‌ای کلاسیک",
             "عقربه‌ای ساده (نقطه‌ای)",
             "عقربه‌ای با اعداد فارسی",
-            "عقربه‌ای + دیجیتال درشت",
+            "عقربه‌ای + دیجیتال درشت (اعداد انگلیسی)",
         )
         const val STYLE_COUNT = 7
 
@@ -75,7 +75,7 @@ class Prefs(ctx: Context) {
     }
 
     var style: Int
-        get() = sp.getInt("style", 2).coerceIn(0, STYLE_COUNT - 1)
+        get() = sp.getInt("style", 6).coerceIn(0, STYLE_COUNT - 1)   // پیش‌فرض: عقربه‌ای + دیجیتال درشت
         set(v) = sp.edit().putInt("style", v).apply()
     var color: Int
         get() = sp.getInt("color", 0).coerceIn(0, colorValues.size - 1)
@@ -114,6 +114,49 @@ class Prefs(ctx: Context) {
     var skyArc: Boolean
         get() = sp.getBoolean("sky_arc", true)
         set(v) = sp.edit().putBoolean("sky_arc", v).apply()
+    // ---------------- نوار پایین صفحهٔ ساعت (راهنماها) ----------------
+    var barNight: Boolean
+        get() = sp.getBoolean("bar_night", true)
+        set(v) = sp.edit().putBoolean("bar_night", v).apply()
+    var barAyat: Boolean
+        get() = sp.getBoolean("bar_ayat", true)
+        set(v) = sp.edit().putBoolean("bar_ayat", v).apply()
+    var barParents: Boolean
+        get() = sp.getBoolean("bar_parents", true)
+        set(v) = sp.edit().putBoolean("bar_parents", v).apply()
+
+    // ---------------- GPS خودکار ----------------
+    /** هر ۱۰ دقیقه یک بار مکان گرفته و نزدیک‌ترین شهر انتخاب شود (بعد GPS خاموش). */
+    var gpsAuto: Boolean
+        get() = sp.getBoolean("gps_auto", false)
+        set(v) = sp.edit().putBoolean("gps_auto", v).apply()
+    var gpsLastTry: Long
+        get() = sp.getLong("gps_last", 0L)
+        set(v) = sp.edit().putLong("gps_last", v).apply()
+
+    /** هنگام اذان، «اذان به افق …» با صدا گفته شود (اگر موتور گفتار فارسی روی گوشی باشد). */
+    var announceCity: Boolean
+        get() = sp.getBoolean("announce_city", true)
+        set(v) = sp.edit().putBoolean("announce_city", v).apply()
+
+    // ---------------- آلبوم عکس ----------------
+    var album: Boolean
+        get() = sp.getBoolean("album", false)
+        set(v) = sp.edit().putBoolean("album", v).apply()
+    /** ۰ دایره، ۱ مربع. */
+    var albumShape: Int
+        get() = sp.getInt("album_shape", 0).coerceIn(0, 1)
+        set(v) = sp.edit().putInt("album_shape", v).apply()
+    var albumMusic: Boolean
+        get() = sp.getBoolean("album_music", false)
+        set(v) = sp.edit().putBoolean("album_music", v).apply()
+    var albumMusicUri: String
+        get() = sp.getString("album_music_uri", "") ?: ""
+        set(v) = sp.edit().putString("album_music_uri", v).apply()
+    var albumMusicName: String
+        get() = sp.getString("album_music_name", "") ?: ""
+        set(v) = sp.edit().putString("album_music_name", v).apply()
+
     /** گوشی افقی: ساعت دیجیتال تمام‌صفحه و خیلی درشت (ساعت چپ، دقیقه راست). */
     var landscapeBig: Boolean
         get() = sp.getBoolean("land_big", true)

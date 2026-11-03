@@ -21,7 +21,10 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * پخش صدا در پس‌زمینه (اذان، صدای خروس یا فایل انتخابی کاربر) با «سرویس پیش‌زمینه»،
@@ -34,27 +37,71 @@ class SoundService : Service() {
     private var vibrator: Vibrator? = null
     private val handler = Handler(Looper.getMainLooper())
     private val stopAll = Runnable { stopSelf() }
+    private var tts: TextToSpeech? = null
+    private var started = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
         val kind = intent?.getStringExtra(EXTRA_KIND) ?: KIND_ROOSTER
-        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "ساعت همیشه‌روشن"
-        goForeground(title)
-        release()
         val prefs = Prefs(this)
+        val city = prefs.location().name
+        val name = intent?.getStringExtra(EXTRA_TITLE) ?: "ساعت همیشه‌روشن"
+        // اذان: «اذان صبح به افق تهران» در اعلان و پنجرهٔ بازشو
+        val title = if (kind == KIND_ADHAN) "$name به افق $city" else name
+        goForeground(title, if (kind == KIND_ADHAN) AdhanActivity.intent(this, name, city) else null)
+        release()
         val vibrate = if (kind == KIND_ADHAN) prefs.adhanVibrate else prefs.roosterVibrate
         val mp = createPlayer(sourcesFor(kind, prefs))
         if (mp == null) { stopSelf(); return START_NOT_STICKY }
         player = mp
         mp.setOnCompletionListener { stopSelf() }
         mp.setOnErrorListener { _, _, _ -> stopSelf(); true }
-        mp.start()
-        if (vibrate) startVibration()
         handler.removeCallbacks(stopAll)
         handler.postDelayed(stopAll, MAX_MS)
+        started = false
+        if (kind == KIND_ADHAN) {
+            // پنجرهٔ «اذان به افق …» با دکمه‌های قطع و ادامه (اگر اندروید اجازه دهد مستقیم باز می‌شود؛
+            // وگرنه از راه اعلان تمام‌صفحه)
+            try { startActivity(AdhanActivity.intent(this, name, city)) } catch (_: Exception) {}
+        }
+        if (kind == KIND_ADHAN && prefs.announceCity) announce("$name به افق $city") { begin(vibrate) }
+        else begin(vibrate)
         return START_NOT_STICKY
+    }
+
+    private fun begin(vibrate: Boolean) {
+        if (started) return
+        started = true
+        try { player?.start() } catch (_: Exception) { stopSelf(); return }
+        if (vibrate) startVibration()
+    }
+
+    /**
+     * گفتن [text] با موتور گفتار فارسی گوشی، سپس [then]. اگر گفتار فارسی روی گوشی نبود یا ۶ ثانیه
+     * طول کشید، بی‌صدا رد می‌شود.
+     */
+    private fun announce(text: String, then: () -> Unit) {
+        val guard = Runnable { then() }
+        handler.postDelayed(guard, 6_000L)
+        val done = { handler.removeCallbacks(guard); handler.post { then() }; Unit }
+        try {
+            tts = TextToSpeech(this) { status ->
+                val t = tts
+                if (status != TextToSpeech.SUCCESS || t == null ||
+                    t.setLanguage(Locale("fa", "IR")) < TextToSpeech.LANG_AVAILABLE) { done(); return@TextToSpeech }
+                t.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) { handler.removeCallbacks(guard) }
+                    override fun onDone(utteranceId: String?) { done() }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) { done() }
+                })
+                if (t.speak(text, TextToSpeech.QUEUE_FLUSH, null, "city") != TextToSpeech.SUCCESS) done()
+            }
+        } catch (_: Exception) { done() }
     }
 
     /** منبع‌های صدا به ترتیب اولویت: فایل انتخابی کاربر، فایل همراه برنامه، زنگ هشدار گوشی. */
@@ -113,23 +160,29 @@ class SoundService : Service() {
         } catch (_: Exception) {}
     }
 
-    private fun goForeground(title: String) {
+    private fun goForeground(title: String, popup: Intent?) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL) == null) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, "اذان و زنگ طلوع", NotificationManager.IMPORTANCE_DEFAULT)
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "اذان و زنگ طلوع", NotificationManager.IMPORTANCE_HIGH)
                 .apply { setSound(null, null); enableVibration(false) })
         }
         val stopPi = PendingIntent.getService(this, 0,
             Intent(this, SoundService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val n = Notification.Builder(this, CHANNEL)
+        val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(title)
             .setContentText("برای قطع صدا «قطع» را بزنید")
             .setOngoing(true)
             .setDeleteIntent(stopPi)
+            .setCategory(Notification.CATEGORY_ALARM)
             .addAction(Notification.Action.Builder(null, "قطع", stopPi).build())
-            .build()
+        if (popup != null) {
+            val pi = PendingIntent.getActivity(this, 1, popup,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            b.setContentIntent(pi).setFullScreenIntent(pi, true)
+        }
+        val n = b.build()
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         else startForeground(NOTIF_ID, n)
     }
@@ -142,8 +195,12 @@ class SoundService : Service() {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(stopAll)
+        handler.removeCallbacksAndMessages(null)
+        try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
+        tts = null
         release()
+        // پنجرهٔ اذان (اگر باز است) بسته شود
+        sendBroadcast(Intent(ACTION_FINISHED).setPackage(packageName))
         super.onDestroy()
     }
 
@@ -153,7 +210,8 @@ class SoundService : Service() {
         private const val EXTRA_KIND = "kind"
         private const val EXTRA_TITLE = "title"
         private const val ACTION_STOP = "com.denanex.aod.STOP_SOUND"
-        private const val CHANNEL = "sounds"
+        const val ACTION_FINISHED = "com.denanex.aod.SOUND_FINISHED"
+        private const val CHANNEL = "sounds2"   // اهمیت «زیاد» تا پنجرهٔ اذان روی صفحه بیاید
         private const val NOTIF_ID = 41
         /** حداکثر زمان پخش (برای فایل‌های خیلی طولانی). */
         private const val MAX_MS = 10 * 60_000L
