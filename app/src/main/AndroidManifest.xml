@@ -47,6 +47,8 @@
 
         <!-- بیپ پیش از اذان صبح -->
         <receiver android:name=".BeepReceiver" android:exported="false" />
+        <!-- صدای خروس پیش از طلوع آفتاب -->
+        <receiver android:name=".RoosterReceiver" android:exported="false" />
         <receiver android:name=".InstallReceiver" android:exported="false" />
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

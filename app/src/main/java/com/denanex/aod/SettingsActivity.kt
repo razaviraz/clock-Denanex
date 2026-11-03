@@ -11,6 +11,9 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.MotionEvent
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -35,6 +38,13 @@ class SettingsActivity : Activity() {
     private lateinit var sunInfo: TextView
     private lateinit var citySpinner: Spinner
     private lateinit var hijriInfo: TextView
+    private lateinit var roosterInfo: TextView
+
+    // اگر صفحه ۲ دقیقه لمس نشد، ساعت خودکار باز شود
+    private val idleHandler = Handler(Looper.getMainLooper())
+    private val idleRun = Runnable {
+        if (prefs.autoClock && !isFinishing) startActivity(Intent(this, AodActivity::class.java))
+    }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -69,14 +79,11 @@ class SettingsActivity : Activity() {
         root.addView(bigButton("▶  نمایش ساعت") {
             startActivity(Intent(this, AodActivity::class.java))
         })
-        root.addView(bigButton("🌅  پیش‌نمایش شفق و طلوع (حدود ۱ دقیقه)") {
+        root.addView(bigButton("🌅  پیش‌نمایش سفیدی صبح و طلوع (حدود ۱ دقیقه)") {
             startActivity(Intent(this, AodActivity::class.java).putExtra(AodActivity.EXTRA_DEMO, true))
         })
         root.addView(hint("در صفحهٔ ساعت: نگه داشتن = تنظیمات • دو ضربه = خروج • " +
             "ضربه روی «راهنمای نماز شب» = باز شدن راهنما • شکل ساعت فقط از همین‌جا عوض می‌شود"))
-        root.addView(bigButton("🌙  راهنمای نماز شب") {
-            startActivity(Intent(this, GuideActivity::class.java))
-        })
 
         section(root, "ظاهر ساعت")
         root.addView(spinner("شکل ساعت", Prefs.styleNames, prefs.style) { prefs.style = it; refresh() })
@@ -88,24 +95,44 @@ class SettingsActivity : Activity() {
         root.addView(switch("باتری", prefs.showBattery) { prefs.showBattery = it; refresh() })
         root.addView(switch("اذان صبح و طلوع آفتاب (با زمان مانده)", prefs.showSunrise) { prefs.showSunrise = it; refresh() })
 
-        section(root, "شفق و طلوع آفتاب")
-        root.addView(switch("نمایش سرخی شفق و طلوع خورشید", prefs.sunrise) { prefs.sunrise = it; refresh() })
-        root.addView(switch("آسمان نیمه‌شب از ۲۰ دقیقه پیش از اذان صبح", prefs.nightSky) { prefs.nightSky = it; refresh() })
+        section(root, "سفیدی صبح و طلوع آفتاب")
+        root.addView(switch("نمایش سفیدی صبح و طلوع خورشید", prefs.sunrise) { prefs.sunrise = it; refresh() })
+        root.addView(hint("از چند دقیقه پیش از طلوع (پیش‌فرض ۱۰ دقیقه) سفیدی ملایم صبح در افق پیدا می‌شود؛ " +
+            "سر وقت طلوع، خورشید از پشت افق درمی‌آید و تا ۲۰ دقیقه پس از طلوع آرام بالا می‌رود."))
         root.addView(switch("هلال ماه بالای ساعت", prefs.moon) { prefs.moon = it; refresh() })
         val cityNames = Cities.list.map { it.name } + "📍 موقعیت من (GPS)"
         val cityIndex = if (prefs.city == Prefs.CITY_MY_LOCATION) Cities.list.size else prefs.city
         val cityRow = spinner("افق شرعی شهر", cityNames.toTypedArray(), cityIndex) {
-            if (it == Cities.list.size) useMyLocation() else { prefs.city = it; refresh(); FajrBeep.schedule(this) }
+            if (it == Cities.list.size) useMyLocation() else { prefs.city = it; refresh(); FajrBeep.scheduleAll(this) }
         }
         citySpinner = cityRow.getChildAt(1) as Spinner
         root.addView(cityRow)
         sunInfo = hint("")
         root.addView(sunInfo)
-        root.addView(seek("شروع شفق، چند دقیقه پیش از طلوع", 3, 40, prefs.dawnMinutes, "دقیقه") {
+        root.addView(seek("شروع سفیدی صبح، چند دقیقه پیش از طلوع", 3, 40, prefs.dawnMinutes, "دقیقه") {
             prefs.dawnMinutes = it; refresh()
         })
 
-        section(root, "بیپ پیش از اذان صبح")
+        section(root, "🐓 صدای خروس پیش از طلوع آفتاب")
+        root.addView(switch("پخش صدای خروس (قوقولی‌قوقو)", prefs.rooster) {
+            prefs.rooster = it; Rooster.schedule(this); refresh()
+        })
+        root.addView(seek("چند دقیقه پیش از طلوع آفتاب", 0, 60, prefs.roosterMinutes, "دقیقه",
+            { v -> if (v == 0) "سر وقت طلوع" else Persian.digits("$v") + " دقیقه" }) {
+            prefs.roosterMinutes = it; Rooster.schedule(this); refresh()
+        })
+        roosterInfo = hint("")
+        root.addView(roosterInfo)
+        root.addView(bigButton("🐓  آزمایش صدای خروس") { Rooster.play(this) })
+
+        section(root, "🌙 نماز شب و سحر")
+        root.addView(bigButton("🌙  راهنمای نماز شب") {
+            startActivity(Intent(this, GuideActivity::class.java))
+        })
+        root.addView(hint("راهنما از صفحهٔ ساعت هم باز می‌شود: روی خط طلایی «راهنمای نماز شب» پایین صفحه ضربه بزنید."))
+        root.addView(switch("آسمان نیمه‌شب (سرمه‌ای با ستاره) از ۲۰ دقیقه پیش از اذان صبح", prefs.nightSky) {
+            prefs.nightSky = it; refresh()
+        })
         root.addView(switch("بیپ هر ۵ دقیقه از ۲۰ دقیقه مانده به اذان صبح", prefs.fajrBeep) {
             prefs.fajrBeep = it; FajrBeep.schedule(this)
         })
@@ -125,6 +152,9 @@ class SettingsActivity : Activity() {
         root.addView(seek("نور صفحه", 1, 100, prefs.brightness, "٪") { prefs.brightness = it })
         root.addView(switch("هنگام طلوع کم‌کم نور صفحه بیشتر شود", prefs.brightenAtDawn) { prefs.brightenAtDawn = it })
         root.addView(switch("جابه‌جایی آرام ساعت (جلوگیری از سوختن صفحه)", prefs.burnIn) { prefs.burnIn = it; refresh() })
+        root.addView(switch("اگر ۲ دقیقه صفحه لمس نشد، ساعت خودکار باز شود", prefs.autoClock) {
+            prefs.autoClock = it; resetIdle()
+        })
 
         section(root, "نمایش خودکار هنگام شارژ")
         root.addView(hint("اگر این اپ را به‌عنوان «محافظ صفحه» (Screen saver) انتخاب کنید، هر وقت گوشی در شارژ است " +
@@ -152,10 +182,17 @@ class SettingsActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(28), 0, 0)
         })
+        root.addView(TextView(this).apply {
+            text = "نسخهٔ " + Persian.digits(Updater.currentName(this@SettingsActivity))
+            textSize = 13f
+            setTextColor(Color.rgb(0x90, 0x90, 0x98))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, 0)
+        })
 
         setContentView(scroll)
         refresh()
-        FajrBeep.schedule(this)
+        FajrBeep.scheduleAll(this)
         if (savedInstanceState == null) Updater.check(this)
     }
 
@@ -165,11 +202,24 @@ class SettingsActivity : Activity() {
         preview.start()
         refresh()
         Updater.resume(this)
+        resetIdle()
     }
 
     override fun onPause() {
+        idleHandler.removeCallbacks(idleRun)
         preview.stop()
         super.onPause()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        resetIdle()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** شمارش ۲ دقیقهٔ بی‌لمسی را از نو شروع می‌کند. */
+    private fun resetIdle() {
+        idleHandler.removeCallbacks(idleRun)
+        if (prefs.autoClock) idleHandler.postDelayed(idleRun, IDLE_MS)
     }
 
     private fun refresh() {
@@ -193,14 +243,19 @@ class SettingsActivity : Activity() {
         hijriInfo.text = "امروز به قمری: " + Persian.digits("${hj[2]} ") + Hijri.months[hj[1] - 1] +
             Persian.digits(" ${hj[0]}") + (if (hol != null) " — تعطیل: $hol" else "") +
             "\nاگر با تقویم رسمی یک روز فرق داشت، با نوار زیر درستش کنید (تعطیلات مذهبی از روی همین حساب می‌شود)."
-        if (sr == null) { sunInfo.text = ""; return }
+        if (sr == null) { sunInfo.text = ""; roosterInfo.text = ""; return }
         val s = Calendar.getInstance().apply { timeInMillis = sr }
         val d = Calendar.getInstance().apply { timeInMillis = sr - prefs.dawnMinutes * 60_000L }
         fun hm(c: Calendar) = Persian.digits(String.format(java.util.Locale.US, "%02d:%02d",
             c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE)))
         val fj = SunCalc.fajr(cal.timeInMillis, loc.lat, loc.lon)
         val fjs = if (fj == null) "" else "اذان صبح: ${hm(Calendar.getInstance().apply { timeInMillis = fj })} — "
-        sunInfo.text = "$day به افق ${loc.name}: ${fjs}طلوع آفتاب: ${hm(s)} — شروع شفق: ${hm(d)}"
+        sunInfo.text = "$day به افق ${loc.name}: ${fjs}طلوع آفتاب: ${hm(s)} — شروع سفیدی صبح: ${hm(d)}"
+        val nextR = Rooster.times(this, now).filter { it > now }.minOrNull()
+        val rs = Calendar.getInstance().apply { timeInMillis = nextR ?: now }
+        val rDay = if (rs.get(Calendar.DAY_OF_YEAR) == now2.get(Calendar.DAY_OF_YEAR)) "امروز" else "فردا"
+        roosterInfo.text = (if (prefs.rooster && nextR != null) "$rDay ساعت ${hm(rs)} پخش می‌شود. " else "خاموش است. ") +
+            "حتی وقتی اپ بسته است هم پخش می‌شود. بلندی صدا = صدای «زنگ هشدار» گوشی."
     }
 
     // ---------------- موقعیت من ----------------
@@ -243,7 +298,7 @@ class SettingsActivity : Activity() {
         prefs.myLat = l.latitude
         prefs.myLon = l.longitude
         prefs.city = Prefs.CITY_MY_LOCATION
-        FajrBeep.schedule(this)
+        FajrBeep.scheduleAll(this)
         Toast.makeText(this, "موقعیت ذخیره شد", Toast.LENGTH_SHORT).show()
         refresh()
     }
@@ -354,5 +409,6 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val REQ_LOC = 7
+        private const val IDLE_MS = 2 * 60_000L
     }
 }

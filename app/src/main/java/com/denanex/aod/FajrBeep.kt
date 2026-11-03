@@ -36,6 +36,12 @@ object FajrBeep {
         return out
     }
 
+    /** همهٔ هشدارها (بیپ اذان صبح و صدای خروس) را دوباره زمان‌بندی می‌کند. */
+    fun scheduleAll(ctx: Context) {
+        schedule(ctx)
+        Rooster.schedule(ctx)
+    }
+
     /** بیپ بعدی را زمان‌بندی (یا اگر خاموش است، لغو) می‌کند. */
     fun schedule(ctx: Context) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -118,6 +124,6 @@ class BeepReceiver : BroadcastReceiver() {
 /** پس از روشن شدن گوشی، تغییر ساعت/منطقهٔ زمانی یا به‌روزرسانی اپ: زمان‌بندی دوباره. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        FajrBeep.schedule(context.applicationContext)
+        FajrBeep.scheduleAll(context.applicationContext)
     }
 }
