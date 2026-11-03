@@ -73,7 +73,7 @@ class AodActivity : Activity() {
         view.reload()
         view.prefs.applyBrightness(window, 0f)
         view.start()
-        FajrBeep.schedule(this)
+        FajrBeep.scheduleAll(this)
     }
 
     override fun onPause() {

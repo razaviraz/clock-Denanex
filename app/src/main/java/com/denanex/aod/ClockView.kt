@@ -28,8 +28,8 @@ import kotlin.math.sin
 
 /**
  * نمای اصلی: پس‌زمینهٔ کاملاً سیاه (کم‌مصرف روی AMOLED)، ساعت درشت (دیجیتال یا عقربه‌ای)،
- * تاریخ خورشیدی، باتری، و چند دقیقه پیش از طلوع: سرخی شفق در افق که کم‌کم پررنگ می‌شود
- * و سر وقت طلوع (افق شرعی شهر انتخابی) قرص خورشید آرام از پشت افق بالا می‌آید.
+ * تاریخ خورشیدی، باتری، و چند دقیقه پیش از طلوع: سفیدی ملایم صبح در افق که کم‌کم روشن می‌شود
+ * و سر وقت طلوع (افق شرعی شهر انتخابی) قرص خورشید از پشت افق درمی‌آید و ۲۰ دقیقه آرام بالا می‌رود.
  */
 class ClockView(ctx: Context) : View(ctx) {
 
@@ -98,6 +98,9 @@ class ClockView(ctx: Context) : View(ctx) {
     private var batteryText = ""
     private var lastLevel = -1f
 
+    /** شمارهٔ نسخهٔ نصب‌شده، برای پایین صفحه. */
+    private var versionText = ""
+
     init {
         setBackgroundColor(Color.BLACK)
         keepScreenOn = true
@@ -105,6 +108,7 @@ class ClockView(ctx: Context) : View(ctx) {
 
     fun reload() {
         prefs = Prefs(context)
+        versionText = Updater.currentName(context).let { if (it.isEmpty()) "" else "نسخهٔ " + Persian.digits(it) }
         cacheKey = ""
         batteryMinute = -1
         invalidate()
@@ -219,6 +223,16 @@ class ClockView(ctx: Context) : View(ctx) {
             // زمین/کوه‌ها (سیاه) — پایین خورشید را می‌پوشاند تا از پشت افق بالا بیاید
             canvas.drawPath(ground, groundPaint)
         }
+        // روی آسمان روشن صبح، سایهٔ تیرهٔ ملایم زیر نوشته‌ها تا خوانا بمانند
+        if (level > 0.05f) {
+            val sh = Color.argb((190 * level).toInt(), 0, 0, 0)
+            val rad = min(w, h) * 0.012f
+            timePaint.setShadowLayer(rad, 0f, 0f, sh)
+            smallPaint.setShadowLayer(rad, 0f, 0f, sh)
+        } else {
+            timePaint.clearShadowLayer()
+            smallPaint.clearShadowLayer()
+        }
         if (kotlin.math.abs(level - lastLevel) > 0.01f || (level == 0f && lastLevel != 0f)) {
             lastLevel = level
             onSkyLevel?.invoke(level)
@@ -234,7 +248,9 @@ class ClockView(ctx: Context) : View(ctx) {
         }
         val portrait = h >= w
         val cx = w / 2f + dx
-        val cy = (if (portrait) h * 0.36f else h * 0.30f) + dy
+        // شکل «عقربه‌ای + دیجیتال درشت» بلندتر است؛ کمی بالاتر رسم شود
+        val cy = (if (prefs.style == STYLE_ANALOG_DIGITAL) (if (portrait) h * 0.29f else h * 0.25f)
+                  else (if (portrait) h * 0.36f else h * 0.30f)) + dy
 
         // ۳) هلال ماه بالای ساعت
         if (prefs.moon) drawMoon(canvas, now, w, h, dx)
@@ -330,16 +346,22 @@ class ClockView(ctx: Context) : View(ctx) {
         return bottom
     }
 
-    /** ساعت عقربه‌ای (سه شکل). */
+    /** ساعت عقربه‌ای (چهار شکل؛ آخری با ساعت دیجیتال درشت زیرش). */
     private fun drawAnalog(c: Canvas, cx: Float, cy: Float, w: Float, h: Float, color: Int, style: Int): Float {
         val portrait = h >= w
-        val r = if (portrait) min(w * 0.40f, h * 0.23f) else min(h * 0.24f, w * 0.30f)
+        val withDigital = style == STYLE_ANALOG_DIGITAL
+        val r = when {
+            withDigital && portrait -> min(w * 0.34f, h * 0.17f)
+            withDigital -> min(h * 0.17f, w * 0.22f)
+            portrait -> min(w * 0.40f, h * 0.23f)
+            else -> min(h * 0.24f, w * 0.30f)
+        }
         val sec = cal.get(Calendar.SECOND) + (if (prefs.seconds) cal.get(Calendar.MILLISECOND) / 1000f else 0f)
         val minute = cal.get(Calendar.MINUTE) + sec / 60f
         val hour = (cal.get(Calendar.HOUR_OF_DAY) % 12) + minute / 60f
 
         when (style) {
-            3 -> { // کلاسیک: خط‌های دقیقه و ساعت + اعداد ۱۲، ۳، ۶، ۹
+            3, STYLE_ANALOG_DIGITAL -> { // کلاسیک: خط‌های دقیقه و ساعت + اعداد ۱۲، ۳، ۶، ۹
                 for (i in 0 until 60) {
                     val big = i % 5 == 0
                     strokePaint.color = color
@@ -384,6 +406,8 @@ class ClockView(ctx: Context) : View(ctx) {
         fillPaint.color = Color.BLACK
         c.drawCircle(cx, cy, r * 0.018f, fillPaint)
 
+        if (withDigital) return drawBigDigitalUnder(c, cx, cy + r, w, h, color)
+
         // زیر ساعت عقربه‌ای، ساعت دیجیتال کوچک
         smallPaint.typeface = tfLight
         smallPaint.color = color
@@ -393,6 +417,29 @@ class ClockView(ctx: Context) : View(ctx) {
         val ampm = if (prefs.h24) "" else "  " + (if (cal.get(Calendar.AM_PM) == Calendar.AM) "ق.ظ" else "ب.ظ")
         c.drawText(fa(two(hourValue()) + ":" + two(cal.get(Calendar.MINUTE))) + ampm, cx, base, smallPaint)
         return base
+    }
+
+    /** ساعت دیجیتال با قلم درشت زیر ساعت عقربه‌ای ([top] = پایین صفحهٔ عقربه‌ای)؛ پایین بلوک را برمی‌گرداند. */
+    private fun drawBigDigitalUnder(c: Canvas, cx: Float, top: Float, w: Float, h: Float, color: Int): Float {
+        val portrait = h >= w
+        timePaint.typeface = tfMedium
+        timePaint.color = color
+        timePaint.alpha = 255
+        fit(timePaint, fa("00:00"), if (portrait) w * 0.62f else w * 0.30f, if (portrait) h * 0.085f else h * 0.13f)
+        val fm = timePaint.fontMetrics
+        val base = top + timePaint.textSize * 0.18f - fm.ascent * 0.80f
+        c.drawText(fa(two(hourValue()) + ":" + two(cal.get(Calendar.MINUTE))), cx, base, timePaint)
+        var bottom = base + fm.descent * 0.3f
+        val sub = subLine()
+        if (sub.isNotEmpty()) {
+            smallPaint.typeface = tfLight
+            smallPaint.color = color
+            smallPaint.alpha = 200
+            smallPaint.textSize = timePaint.textSize * 0.24f
+            bottom += smallPaint.textSize * 1.2f
+            c.drawText(sub, cx, bottom, smallPaint)
+        }
+        return bottom
     }
 
     private fun numbers(c: Canvas, cx: Float, cy: Float, rr: Float, size: Float, color: Int,
@@ -443,8 +490,10 @@ class ClockView(ctx: Context) : View(ctx) {
             val hol = Hijri.holiday(j[1], j[2], hj)
             val d = Persian.weekday(cal.get(Calendar.DAY_OF_WEEK)) + "  " +
                 fa(j[2].toString()) + " " + Persian.months[j[1] - 1] + " " + fa(j[0].toString())
+            val dateSize = big * 1.18f      // تاریخ خورشیدی کمی درشت‌تر
+            y += dateSize - big
             smallPaint.typeface = tfMedium
-            smallPaint.textSize = big
+            smallPaint.textSize = dateSize
             if (friday || hol != null) smallPaint.color = HOLIDAY_RED
             smallPaint.alpha = 235
             c.drawText(d, cx, y, smallPaint)
@@ -456,7 +505,7 @@ class ClockView(ctx: Context) : View(ctx) {
                 c.drawText(hol, cx, y, smallPaint)
             }
             smallPaint.color = color
-            y += big * 1.5f
+            y += big * 1.45f
         }
 
         if (prefs.showSunrise) {
@@ -473,15 +522,17 @@ class ClockView(ctx: Context) : View(ctx) {
         if (prefs.showBattery) {
             val b = battery(now)
             if (b.isNotEmpty()) {
-                smallPaint.typeface = tfLight
-                smallPaint.alpha = 150
-                smallPaint.textSize = base * 0.85f
+                // درصد باتری کمی درشت‌تر و روشن‌تر
+                smallPaint.typeface = tfMedium
+                smallPaint.alpha = 190
+                smallPaint.textSize = base * 1.12f
+                y += base * 0.15f
                 c.drawText(b, cx, y, smallPaint)
             }
         }
     }
 
-    /** پایین صفحه (روی زمین سیاه): «راهنمای نماز شب» (با ضربه باز می‌شود) و نام تهیه‌کننده. */
+    /** پایین صفحه (روی زمین سیاه): «راهنمای نماز شب» (با ضربه باز می‌شود)، نام تهیه‌کننده و شمارهٔ نسخه. */
     private fun drawFooter(c: Canvas, cx: Float, w: Float, h: Float) {
         val base = min(w, h) * (if (h >= w) 0.042f else 0.034f)
         val gap = h - horizonY
@@ -490,7 +541,7 @@ class ClockView(ctx: Context) : View(ctx) {
         smallPaint.color = GUIDE_GOLD
         smallPaint.alpha = 210
         smallPaint.isUnderlineText = true
-        val gy = horizonY + gap * 0.42f
+        val gy = horizonY + gap * 0.36f
         c.drawText("🌙 راهنمای نماز شب", cx, gy, smallPaint)
         smallPaint.isUnderlineText = false
         guideRect.set(cx - w * 0.35f, gy - base * 1.6f, cx + w * 0.35f, gy + base * 0.9f)
@@ -499,7 +550,13 @@ class ClockView(ctx: Context) : View(ctx) {
         smallPaint.textSize = base * 0.8f
         smallPaint.color = Color.WHITE
         smallPaint.alpha = 120
-        c.drawText(Prefs.CREDIT, cx, horizonY + gap * 0.78f, smallPaint)
+        c.drawText(Prefs.CREDIT, cx, horizonY + gap * 0.66f, smallPaint)
+
+        if (versionText.isNotEmpty()) {
+            smallPaint.textSize = base * 0.62f
+            smallPaint.alpha = 95
+            c.drawText(versionText, cx, horizonY + gap * 0.88f, smallPaint)
+        }
     }
 
     private fun hm(ms: Long): String {
@@ -540,9 +597,10 @@ class ClockView(ctx: Context) : View(ctx) {
 
     /**
      * [t] = دقیقه نسبت به لحظهٔ طلوع (منفی = پیش از طلوع).
-     * از ‎-dawnMinutes تا ۰: سرخی شفق کم‌کم در افق پیدا و پررنگ می‌شود (سرخ تیره ← سرخ آتشین).
-     * از ۰ تا ۳ دقیقه: قرص خورشید آرام از پشت افق بالا می‌آید (مثل طلوع واقعی).
-     * تا ۱۴ دقیقه: رنگ‌ها به نارنجی و طلایی می‌روند و خورشید کمی بالاتر می‌آید؛ سپس تا ۲۲ دقیقه آرام محو می‌شود.
+     * از ‎-dawnMinutes (پیش‌فرض ۱۰ دقیقه) تا ۰: سفیدی ملایم صبح کم‌کم در افق پیدا و روشن می‌شود
+     * (خاکستری‌آبی کم‌رنگ ← سفید ملایم، و نزدیک طلوع کمی طلایی در جای درآمدن خورشید).
+     * سر وقت طلوع (۰ تا ۳ دقیقه): قرص خورشید از پشت افق درمی‌آید.
+     * تا ۲۰ دقیقه پس از طلوع: خورشید آرام بالا می‌رود و آسمان آبی روشن صبح می‌شود؛ سپس در یک دقیقه محو می‌شود.
      * شدت کلی (۰ تا ۱) را برمی‌گرداند.
      */
     private fun drawSky(c: Canvas, t: Float, w: Float, h: Float): Float {
@@ -557,23 +615,24 @@ class ClockView(ctx: Context) : View(ctx) {
         val cU: Int
         val glowH: Float
         if (t < 0f) {
-            val p = (t + dawn) / dawn                    // ۰ ← شروع شفق، ۱ ← لحظهٔ طلوع
-            level = p.pow(1.7f)
-            cH = lerpColor(0xFF4A0712.toInt(), 0xFFE0401C.toInt(), p)
-            cU = lerpColor(0xFF14030F.toInt(), 0xFF5A1238.toInt(), p)
-            glowH = h * (0.10f + 0.30f * p)
+            val p = (t + dawn) / dawn                    // ۰ ← شروع سفیدی صبح، ۱ ← لحظهٔ طلوع
+            level = p.pow(1.3f)
+            cH = if (p < 0.7f) lerpColor(DAWN_DIM, DAWN_WHITE, p / 0.7f)
+                 else lerpColor(DAWN_WHITE, DAWN_GOLD, (p - 0.7f) / 0.3f)
+            cU = lerpColor(0xFF0A1226.toInt(), MORNING_BLUE, p)
+            glowH = h * (0.18f + 0.32f * p)
         } else {
-            val k = min(1f, t / 12f)
-            level = if (t < 14f) 1f else max(0f, 1f - (t - 14f) / (SKY_END_MIN - 14f))
-            cH = lerpColor(0xFFE0401C.toInt(), 0xFFFFA548.toInt(), k)
-            cU = lerpColor(0xFF5A1238.toInt(), 0xFF22406E.toInt(), k)
-            glowH = h * 0.40f
+            val k = min(1f, t / SUN_FULL_MIN)
+            level = if (t <= SUN_FULL_MIN) 1f else max(0f, 1f - (t - SUN_FULL_MIN) / (SKY_END_MIN - SUN_FULL_MIN))
+            cH = lerpColor(DAWN_GOLD, 0xFFFFF4DC.toInt(), k)
+            cU = lerpColor(MORNING_BLUE, 0xFF86A9D6.toInt(), k)
+            glowH = h * 0.50f
         }
         if (level <= 0.001f) return 0f
 
-        // نوار آسمان از افق به بالا
+        // نوار آسمان از افق به بالا (ملایم: کمی کم‌رنگ‌تر از رنگ کامل)
         skyPaint.shader = LinearGradient(0f, hy, 0f, hy - glowH,
-            intArrayOf(withAlpha(cH, level), withAlpha(cU, level * 0.55f), Color.TRANSPARENT),
+            intArrayOf(withAlpha(cH, level * 0.85f), withAlpha(cU, level * 0.50f), Color.TRANSPARENT),
             floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(0f, hy - glowH, w, hy + 2f, skyPaint)
 
@@ -581,21 +640,21 @@ class ClockView(ctx: Context) : View(ctx) {
         c.save()
         c.scale(1f, 0.45f, sunX, hy)
         skyPaint.shader = RadialGradient(sunX, hy, w * 0.75f,
-            intArrayOf(withAlpha(cH, level * 0.95f), withAlpha(cH, level * 0.35f), Color.TRANSPARENT),
+            intArrayOf(withAlpha(cH, level * 0.85f), withAlpha(cH, level * 0.30f), Color.TRANSPARENT),
             floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
         c.drawCircle(sunX, hy, w * 0.75f, skyPaint)
         c.restore()
 
-        // قرص خورشید
+        // قرص خورشید: ۳ دقیقه درآمدن از پشت افق، سپس تا ۲۰ دقیقه آرام بالا رفتن
         if (t >= 0f) {
             val f = smooth(min(1f, t / SUN_EMERGE_MIN))
             var sy = hy + r * 1.02f - 2.04f * r * f
-            if (t > SUN_EMERGE_MIN) sy -= (t - SUN_EMERGE_MIN) / (SKY_END_MIN - SUN_EMERGE_MIN) * 1.6f * r
-            val k2 = min(1f, t / 8f)
-            val core = lerpColor(0xFFFF8A4A.toInt(), 0xFFFFF4C8.toInt(), k2)
-            val edge = lerpColor(0xFFD8341C.toInt(), 0xFFFFB347.toInt(), k2)
+            if (t > SUN_EMERGE_MIN) sy -= (t - SUN_EMERGE_MIN) / (SUN_FULL_MIN - SUN_EMERGE_MIN) * SUN_RISE_RADII * r
+            val k2 = min(1f, t / 10f)
+            val core = lerpColor(0xFFFFD98A.toInt(), 0xFFFFFAE6.toInt(), k2)
+            val edge = lerpColor(0xFFFF9440.toInt(), 0xFFFFD27A.toInt(), k2)
             skyPaint.shader = RadialGradient(sunX, sy, r * 3.4f,
-                intArrayOf(withAlpha(edge, level * 0.6f), withAlpha(edge, level * 0.18f), Color.TRANSPARENT),
+                intArrayOf(withAlpha(edge, level * 0.55f), withAlpha(edge, level * 0.16f), Color.TRANSPARENT),
                 floatArrayOf(0f, 0.35f, 1f), Shader.TileMode.CLAMP)
             c.drawCircle(sunX, sy, r * 3.4f, skyPaint)
             skyPaint.shader = RadialGradient(sunX, sy, r,
@@ -706,8 +765,18 @@ class ClockView(ctx: Context) : View(ctx) {
     }
 
     companion object {
-        const val SKY_END_MIN = 22f
+        /** خورشید تا چند دقیقه پس از طلوع در حال بالا آمدن نمایش داده شود. */
+        const val SUN_FULL_MIN = 20f
+        /** پایان کامل (پس از یک دقیقه محو شدن). */
+        const val SKY_END_MIN = 21f
         const val SUN_EMERGE_MIN = 3f
+        /** خورشید از ۳ تا ۲۰ دقیقه چند برابر شعاعش بالا برود. */
+        const val SUN_RISE_RADII = 2.8f
+        const val STYLE_ANALOG_DIGITAL = 6
+        val DAWN_DIM = Color.rgb(0x2A, 0x33, 0x46)
+        val DAWN_WHITE = Color.rgb(0xEE, 0xEC, 0xE6)
+        val DAWN_GOLD = Color.rgb(0xFF, 0xE2, 0xB4)
+        val MORNING_BLUE = Color.rgb(0x5E, 0x75, 0x98)
         const val DEMO_SPEED = 30L
         const val NIGHT_BEFORE_FAJR_MS = 20 * 60_000L
         val HOLIDAY_RED = Color.rgb(0xFF, 0x4D, 0x4D)

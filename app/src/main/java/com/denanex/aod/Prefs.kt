@@ -20,8 +20,9 @@ class Prefs(ctx: Context) {
             "عقربه‌ای کلاسیک",
             "عقربه‌ای ساده (نقطه‌ای)",
             "عقربه‌ای با اعداد فارسی",
+            "عقربه‌ای + دیجیتال درشت",
         )
-        const val STYLE_COUNT = 6
+        const val STYLE_COUNT = 7
 
         val colorNames = arrayOf("سفید", "کرم", "کهربایی", "آبی آسمانی", "سبز ملایم", "صورتی", "قرمز (شب)", "سبز فسفری")
         val colorValues = intArrayOf(
@@ -72,11 +73,11 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("show_sunrise", true)
         set(v) = sp.edit().putBoolean("show_sunrise", v).apply()
 
-    /** چند دقیقه پیش از طلوع، سرخی شفق شروع شود. */
+    /** چند دقیقه پیش از طلوع، سفیدی ملایم صبح شروع شود. */
     var dawnMinutes: Int
         get() = sp.getInt("dawn_min", 10).coerceIn(3, 40)
         set(v) = sp.edit().putInt("dawn_min", v).apply()
-    /** نمایش شفق و طلوع روشن باشد یا نه. */
+    /** نمایش سفیدی صبح و طلوع خورشید روشن باشد یا نه. */
     var sunrise: Boolean
         get() = sp.getBoolean("sunrise_fx", true)
         set(v) = sp.edit().putBoolean("sunrise_fx", v).apply()
@@ -85,6 +86,20 @@ class Prefs(ctx: Context) {
     var fajrBeep: Boolean
         get() = sp.getBoolean("fajr_beep", true)
         set(v) = sp.edit().putBoolean("fajr_beep", v).apply()
+    /** صدای خروس پیش از طلوع آفتاب (انتخابی). */
+    var rooster: Boolean
+        get() = sp.getBoolean("rooster", false)
+        set(v) = sp.edit().putBoolean("rooster", v).apply()
+    /** صدای خروس چند دقیقه پیش از طلوع آفتاب پخش شود (۰ = سر طلوع). */
+    var roosterMinutes: Int
+        get() = sp.getInt("rooster_min", 10).coerceIn(0, 60)
+        set(v) = sp.edit().putInt("rooster_min", v).apply()
+
+    /** اگر صفحهٔ تنظیمات ۲ دقیقه لمس نشد، ساعت خودکار باز شود. */
+    var autoClock: Boolean
+        get() = sp.getBoolean("auto_clock", true)
+        set(v) = sp.edit().putBoolean("auto_clock", v).apply()
+
     /** از ۲۰ دقیقه پیش از اذان صبح تا طلوع، پس‌زمینه به رنگ آسمان نیمه‌شب (سرمه‌ای با ستاره). */
     var nightSky: Boolean
         get() = sp.getBoolean("night_sky", true)
