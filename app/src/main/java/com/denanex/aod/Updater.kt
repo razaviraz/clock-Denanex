@@ -38,6 +38,9 @@ object Updater {
 
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var busy = false
+    @Volatile private var checking = false
+    private var offerShowing = false
+    private var offeredThisRun = 0L
     /** اگر برای اجازهٔ «نصب از منابع نامعلوم» به تنظیمات رفتیم، پس از برگشت ادامه بده. */
     private var pending: Info? = null
 
@@ -106,20 +109,36 @@ object Updater {
     /** بررسی نسخهٔ تازه؛ [manual] = کاربر خودش دکمه را زده (پیام «به‌روز است» یا علت خطا هم نشان داده شود). */
     fun check(act: Activity, manual: Boolean = false) {
         if (busy) return
+        // یک بررسی در هر لحظه (صفحهٔ تنظیمات و صفحهٔ ساعت هر دو بررسی می‌کنند)
+        if (checking && !manual) return
+        checking = true
+        if (manual) offeredThisRun = 0L     // دکمهٔ «بررسی به‌روزرسانی»: دوباره نشان بده
         if (manual) Toast.makeText(act, "در حال بررسی به‌روزرسانی…", Toast.LENGTH_SHORT).show()
         Thread {
             val r = fetch()
             main.post {
+                checking = false
                 if (act.isFinishing || act.isDestroyed) return@post
                 val info = r.info
                 when {
                     info == null -> if (manual) showError(act, r.error ?: "")
-                    info.code > currentCode(act) -> offer(act, info)
+                    isNewer(act, info) && (manual || info.code != declinedCode(act)) -> offer(act, info)
                     manual -> Toast.makeText(act, "نسخهٔ شما به‌روز است ✓", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()
     }
+
+    /** نسخهٔ سرور تازه‌تر است؟ (اگر نام نسخه دقیقاً همان نسخهٔ نصب‌شده باشد، تازه نیست.) */
+    private fun isNewer(ctx: Context, info: Info): Boolean =
+        info.code > currentCode(ctx) && info.name != currentName(ctx)
+
+    /** نسخه‌ای که کاربر برایش «بعداً» زده؛ خودکار دوباره پیشنهاد نمی‌شود (فقط با دکمهٔ «بررسی به‌روزرسانی»). */
+    private fun declinedCode(ctx: Context): Long =
+        ctx.getSharedPreferences("aod", Context.MODE_PRIVATE).getLong("upd_declined", 0L)
+
+    private fun setDeclined(ctx: Context, code: Long) =
+        ctx.getSharedPreferences("aod", Context.MODE_PRIVATE).edit().putLong("upd_declined", code).apply()
 
     /** علت خطا، با دکمهٔ باز کردن نشانی در مرورگر (برای آزمایش یا دریافت دستی). */
     private fun showError(act: Activity, why: String) {
@@ -138,13 +157,19 @@ object Updater {
     }
 
     private fun offer(act: Activity, info: Info) {
-        val msg = "نسخهٔ جدید «ساعت همیشه‌روشن» آماده است.\n\nنسخهٔ شما: ${currentName(act)}\nنسخهٔ جدید: ${info.name}" +
+        // فقط یک پنجرهٔ به‌روزرسانی در هر لحظه، و هر نسخه فقط یک بار در هر اجرای برنامه
+        if (offerShowing || offeredThisRun == info.code) return
+        offerShowing = true
+        offeredThisRun = info.code
+        val msg = "نسخهٔ جدید «ساعت همیشه‌روشن» آماده است.\n\nنسخهٔ شما: ${Persian.digits(currentName(act))}" +
+            "\nنسخهٔ جدید: ${Persian.digits(info.name)}" +
             (if (info.notes.isNotBlank()) "\n\n${info.notes}" else "")
         AlertDialog.Builder(act)
             .setTitle("⬆ به‌روزرسانی")
             .setMessage(msg)
             .setPositiveButton("دانلود و نصب") { _, _ -> install(act, info) }
-            .setNegativeButton("بعداً", null)
+            .setNegativeButton("بعداً") { _, _ -> setDeclined(act, info.code) }
+            .setOnDismissListener { offerShowing = false }
             .show()
     }
 
