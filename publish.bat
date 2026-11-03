@@ -3,7 +3,7 @@ rem Build "Clock Denanex" and upload it (target in publish.properties). Turn VPN
 rem Gradle 8.7 runs only on Java 17..21. With Java 22+ (e.g. 25) the build fails with just
 rem "What went wrong: 25.0.3", so every Java found is checked and only 17..21 is used.
 setlocal EnableDelayedExpansion
-echo ===== publish.bat (version 2026-11-03b: Java 17-21 check, opens APK folder) =====
+echo ===== publish.bat (version 2026-11-03c: Java 17-21 check, builds APK even without publish.properties) =====
 set "JH="
 
 rem 1) Android Studio's own Java (jbr) and JAVA_HOME
@@ -40,7 +40,21 @@ set "JAVA_HOME=!JH!"
 echo Using Java: !JAVA_HOME!
 "!JAVA_HOME!\bin\java.exe" -version
 cd /d "%~dp0"
-call gradlew.bat publishApk
+set "UPLOAD=1"
+if not exist "publish.properties" (
+  set "UPLOAD="
+  echo.
+  echo NOTE: publish.properties was not found in this folder, so the APK is only BUILT, not uploaded.
+  echo       Put your publish.properties next to publish.bat to upload as well.
+  echo.
+)
+if defined UPLOAD (
+  call gradlew.bat publishApk
+) else if exist "keystore.properties" (
+  call gradlew.bat assembleRelease
+) else (
+  call gradlew.bat assembleDebug
+)
 if errorlevel 1 (
   echo.
   echo ===== FAILED: see the error above. Take a photo of this window and send it to Claude. =====
@@ -48,15 +62,24 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo ===== SUCCESS: built and uploaded. =====
+if defined UPLOAD (echo ===== SUCCESS: built and uploaded. =====) else (echo ===== SUCCESS: built ^(not uploaded^). =====)
 rem The new APK: phones get it with "check for update" in the app, or copy it to the phone and install it.
 set "APKDIR="
 if exist "app\build\outputs\apk\release\aod.apk" set "APKDIR=app\build\outputs\apk\release"
 if not defined APKDIR if exist "app\build\outputs\apk\debug\aod.apk" set "APKDIR=app\build\outputs\apk\debug"
+set "APKNAME=aod.apk"
+if not defined APKDIR if exist "app\build\outputs\apk\release\app-release.apk" (
+  set "APKDIR=app\build\outputs\apk\release"
+  set "APKNAME=app-release.apk"
+)
+if not defined APKDIR if exist "app\build\outputs\apk\debug\app-debug.apk" (
+  set "APKDIR=app\build\outputs\apk\debug"
+  set "APKNAME=app-debug.apk"
+)
 if defined APKDIR (
-  echo The APK file: %~dp0!APKDIR!\aod.apk
-  echo Opening that folder...
-  start "" explorer /select,"%~dp0!APKDIR!\aod.apk"
+  echo The APK file: %~dp0!APKDIR!\!APKNAME!
+  echo Copy it to the phone and install it. Opening that folder...
+  start "" explorer /select,"%~dp0!APKDIR!\!APKNAME!"
 )
 pause
 exit /b 0
