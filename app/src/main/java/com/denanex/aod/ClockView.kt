@@ -104,6 +104,34 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
 
     // قطب‌نما و قبله
     private val compass = Compass(ctx) { postInvalidate() }
+
+    // آلبوم عکس (اسلاید بالای صفحه)
+    private val album: AlbumPlayer? = if (previewStyle >= 0) null else AlbumPlayer(ctx) { postInvalidate() }
+    /** آلبوم در این رسم نمایش داده می‌شود (روشن، عمودی و دست‌کم یک عکس). */
+    private var albumOn = false
+
+    /** جای آیکون آب‌وهوا روی صفحه (برای ضربه: نمایش نام شهر). */
+    val weatherRect = RectF()
+    /** دکمه‌های نوار پایین (راهنماها): جای هر کدام و نوع راهنما. */
+    val guideRects = ArrayList<Pair<RectF, String>>()
+
+    /** آنچه زیر نقطهٔ ([x]، [y]) است: «weather» یا نوع راهنما (night/ayat/parents)، یا null. */
+    fun hitTest(x: Float, y: Float): String? {
+        if (prefs.weather && weatherNow != null && weatherRect.contains(x, y)) return "weather"
+        for ((r, kind) in guideRects) if (r.contains(x, y)) return kind
+        return null
+    }
+
+    /** متن کوتاه آب‌وهوای شهر انتخابی (برای نمایش با ضربه روی آیکون). */
+    fun weatherText(): String {
+        val wn = weatherNow ?: return ""
+        val desc = when (Weather.kind(wn.code)) {
+            Weather.CLEAR -> "صاف"; Weather.PARTLY -> "نیمه‌ابری"; Weather.CLOUDY -> "ابری"
+            Weather.FOG -> "مه"; Weather.RAIN -> "بارانی"; Weather.SNOW -> "برفی"; else -> "رعد و برق"
+        }
+        val loc = prefs.location()
+        return "آب‌وهوای ${loc.name} (استان ${loc.province}): " + Persian.digits(wn.temp.roundToInt().toString()) + "° — $desc"
+    }
     private var qiblaDeg = 0.0
 
     // ستاره‌های آسمان نیمه‌شب (جای ثابت)
@@ -131,6 +159,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         batteryMinute = -1
         posMinute = -1
         weatherMinute = -1
+        if (prefs.album) album?.reload()
         if (running) updateCompass()
         invalidate()
     }
@@ -147,6 +176,11 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         running = false
         handler.removeCallbacks(tick)
         compass.stop()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (prefs.album) album?.reload()
     }
 
     /** قطب‌نما فقط وقتی لازم است روشن باشد (ساعت عقربه‌ای + گزینهٔ قبله‌نما). */
@@ -202,6 +236,10 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
             prefs.seconds || prefs.style >= 3 -> 1000L - now % 1000L   // عقربه‌ای: عقربهٔ ثانیه همیشه هست
             else -> 60_000L - now % 60_000L + 15L
         }
+        // آلبوم عکس: در حین افکت سریع، وگرنه تا عکس بعدی
+        if (albumOn) album?.let { delay = min(delay, it.nextFrameDelay(now)) }
+        // شهر خودکار با GPS (هر ۱۰ دقیقه یک بار؛ خودش زمان را می‌سنجد)
+        if (!demoActive) LocationAuto.maybeUpdate(context) { post { reload() } }
         // شروع آسمان نیمه‌شب، سفیدی صبح و غروب معمولاً وسط دقیقه است؛ از آن جا نمانیم
         if (!demoActive) {
             for (ev in longArrayOf(sunriseToday - prefs.dawnMinutes * 60_000L, fajrToday - NIGHT_BEFORE_FAJR_MS,
@@ -259,6 +297,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
 
     override fun onDetachedFromWindow() {
         stop()
+        album?.release()
         super.onDetachedFromWindow()
     }
 
@@ -314,6 +353,14 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         drawSkyDome(canvas, now, w, h, dx, hideSun = bigSunOnHorizon)
         if (prefs.weather) drawWeather(canvas, now, w, h)
 
+        // آلبوم عکس بالای صفحه (فقط عمودی)
+        val al = album
+        albumOn = prefs.album && portrait && al != null && !al.isEmpty
+        if (albumOn && al != null) {
+            al.draw(canvas, System.currentTimeMillis(), w / 2f + dx * 0.5f, h * 0.165f + dy * 0.5f,
+                min(w * 0.46f, h * 0.21f), prefs.albumShape == 0, ALBUM_FRAME)
+        }
+
         // ۴) ساعت
         cal.timeInMillis = now
         val color = prefs.mainColor()
@@ -332,8 +379,12 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
             }
             else -> {
                 // شکل «عقربه‌ای + دیجیتال درشت» بلندتر است؛ کمی بالاتر رسم شود
-                val cy = (if (style == STYLE_ANALOG_DIGITAL) (if (portrait) h * 0.30f else h * 0.25f)
-                          else (if (portrait) h * 0.37f else h * 0.30f)) + dy
+                val cy = (when {
+                    albumOn && style == STYLE_ANALOG_DIGITAL -> h * 0.42f
+                    albumOn -> h * 0.45f                    // زیر آلبوم عکس
+                    style == STYLE_ANALOG_DIGITAL -> if (portrait) h * 0.30f else h * 0.25f
+                    else -> if (portrait) h * 0.37f else h * 0.30f
+                }) + dy
                 when (style) {
                     0 -> drawTimeLine(canvas, cx, cy, if (portrait) w * 0.88f else w * 0.55f,
                         if (portrait) h * 0.20f else h * 0.30f, tfThin, color)
@@ -350,7 +401,8 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
 
     private fun analogRadius(style: Int, w: Float, h: Float): Float {
         val portrait = h >= w
-        return when {
+        val k = if (albumOn) 0.78f else 1f        // با آلبوم عکس، ساعت کمی کوچک‌تر
+        return k * when {
             style == STYLE_ANALOG_DIGITAL && portrait -> min(w * 0.33f, h * 0.16f)
             style == STYLE_ANALOG_DIGITAL -> min(h * 0.17f, w * 0.22f)
             portrait -> min(w * 0.40f, h * 0.23f)
@@ -546,7 +598,9 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
                     c.drawLine(cx + (sin(a) * r1).toFloat(), cy - (cos(a) * r1).toFloat(),
                         cx + (sin(a) * r).toFloat(), cy - (cos(a) * r).toFloat(), strokePaint)
                 }
-                numbers(c, cx, cy, r * 0.64f, r * 0.20f, color, intArrayOf(12, 3, 6, 9), tfMedium)
+                // شکل آخر (عقربه‌ای + دیجیتال): اعداد انگلیسی
+                numbers(c, cx, cy, r * 0.64f, r * 0.20f, color, intArrayOf(12, 3, 6, 9), tfMedium,
+                    latin = style == STYLE_ANALOG_DIGITAL)
             }
             4 -> { // ساده: فقط نقطه‌ها
                 fillPaint.color = color
@@ -609,7 +663,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         timePaint.color = color
         timePaint.alpha = 255
         fit(timePaint, fa("00:00"), if (preview) w * 0.62f else if (portrait) w * 0.80f else w * 0.36f,
-            if (preview) h * 0.14f else if (portrait) h * 0.105f else h * 0.15f)
+            if (preview) h * 0.14f else if (albumOn) h * 0.085f else if (portrait) h * 0.105f else h * 0.15f)
         val fm = timePaint.fontMetrics
         val base = top + timePaint.textSize * 0.15f - fm.ascent * 0.80f
         drawFixed(c, timeText(), cx, base, timePaint)
@@ -692,7 +746,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
     }
 
     private fun numbers(c: Canvas, cx: Float, cy: Float, rr: Float, size: Float, color: Int,
-                        which: IntArray, tf: Typeface, forcePersian: Boolean = false) {
+                        which: IntArray, tf: Typeface, forcePersian: Boolean = false, latin: Boolean = false) {
         smallPaint.typeface = tf
         smallPaint.color = color
         smallPaint.alpha = 230
@@ -701,7 +755,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         val off = -(fm.ascent + fm.descent) / 2f
         for (n in which) {
             val a = n * PI / 6
-            val s = Persian.digits(n.toString(), forcePersian || prefs.persianDigits)
+            val s = if (latin) n.toString() else Persian.digits(n.toString(), forcePersian || prefs.persianDigits)
             c.drawText(s, cx + (sin(a) * rr).toFloat(), cy - (cos(a) * rr).toFloat() + off, smallPaint)
         }
     }
@@ -819,15 +873,40 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         }
     }
 
-    /** پایین صفحه (روی زمین سیاه): شمارهٔ نسخه. (نام تهیه‌کننده فقط در تنظیمات و راهنما.) */
+    /**
+     * پایین صفحه (روی زمین سیاه): نوار راهنماها (نماز شب، نماز آیات، نماز والدین؛ هر کدام به انتخاب کاربر،
+     * با ضربه باز می‌شود) و شمارهٔ نسخه. (نام تهیه‌کننده فقط در تنظیمات و راهنما.)
+     */
     private fun drawFooter(c: Canvas, cx: Float, w: Float, h: Float) {
-        if (versionText.isEmpty()) return
         val base = min(w, h) * (if (h >= w) 0.042f else 0.034f)
+        val gap = h - horizonY
+        guideRects.clear()
+        val items = ArrayList<Pair<String, String>>(3)
+        if (prefs.barNight) items.add("🌙 نماز شب" to GuideActivity.KIND_NIGHT)
+        if (prefs.barAyat) items.add("🌘 نماز آیات" to GuideActivity.KIND_AYAT)
+        if (prefs.barParents) items.add("🤲 نماز والدین" to GuideActivity.KIND_PARENTS)
+        if (items.isNotEmpty()) {
+            smallPaint.typeface = tfMedium
+            smallPaint.textSize = base * 0.9f
+            smallPaint.color = GUIDE_GOLD
+            smallPaint.alpha = 200
+            smallPaint.isUnderlineText = true
+            val y = horizonY + gap * 0.40f
+            val cell = w / items.size
+            for ((i, it) in items.withIndex()) {
+                // راست به چپ: اولی سمت راست
+                val x = w - cell * (i + 0.5f)
+                c.drawText(it.first, x, y, smallPaint)
+                guideRects.add(RectF(x - cell / 2f, y - base * 1.8f, x + cell / 2f, y + base * 1.0f) to it.second)
+            }
+            smallPaint.isUnderlineText = false
+        }
+        if (versionText.isEmpty()) return
         smallPaint.typeface = tfLight
         smallPaint.textSize = base * 0.62f
         smallPaint.color = Color.WHITE
         smallPaint.alpha = 95
-        c.drawText(versionText, cx, horizonY + (h - horizonY) * 0.70f, smallPaint)
+        c.drawText(versionText, cx, horizonY + gap * (if (items.isEmpty()) 0.70f else 0.80f), smallPaint)
     }
 
     private fun hm(ms: Long): String {
@@ -989,6 +1068,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         val ix = w * 0.07f + s * 0.5f
         val iy = (if (h >= w) h * 0.035f else h * 0.07f) + s * 0.5f
         drawWeatherIcon(c, ix, iy, s, Weather.kind(wn.code), wn.day)
+        weatherRect.set(ix - s * 0.9f, iy - s * 0.9f, ix + s * 2.4f, iy + s * 0.9f)
         smallPaint.typeface = tfMedium
         smallPaint.textSize = s * 0.62f
         smallPaint.color = Color.WHITE
@@ -1266,6 +1346,8 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         const val NIGHT_BEFORE_FAJR_MS = 20 * 60_000L
         val HOLIDAY_RED = Color.rgb(0xFF, 0x4D, 0x4D)
         val KAABA_GOLD = Color.rgb(0xE8, 0xC2, 0x5A)
+        val GUIDE_GOLD = Color.rgb(0xFF, 0xD5, 0x80)
+        val ALBUM_FRAME = Color.rgb(0xE8, 0xC2, 0x5A)
         val DAWN_DIM = Color.rgb(0x2A, 0x33, 0x46)
         val DAWN_WHITE = Color.rgb(0xEE, 0xEC, 0xE6)
         val DAWN_RED = Color.rgb(0xF2, 0x87, 0x6A)

@@ -13,21 +13,23 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
-/** راهنمای کوتاه خواندن نماز شب یا نماز آیات (بدون اینترنت)؛ نوع با [EXTRA_KIND]. */
+/** راهنمای کوتاه خواندن نماز شب، نماز آیات یا نماز والدین (بدون اینترنت)؛ نوع با [EXTRA_KIND]. */
 class GuideActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val ayat = intent?.getStringExtra(EXTRA_KIND) == KIND_AYAT
+        val kind = intent?.getStringExtra(EXTRA_KIND) ?: KIND_NIGHT
+        val ayat = kind == KIND_AYAT
+        val parents = kind == KIND_PARENTS
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(20), dp(24), dp(20), dp(32))
         }
         root.addView(TextView(this).apply {
-            text = if (ayat) "🌘 راهنمای نماز آیات" else "🌙 راهنمای نماز شب"
+            text = when { ayat -> "🌘 راهنمای نماز آیات"; parents -> "🤲 راهنمای نماز والدین"; else -> "🌙 راهنمای نماز شب" }
             textSize = 24f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.rgb(0xFF, 0xD5, 0x80))
@@ -35,7 +37,7 @@ class GuideActivity : Activity() {
             setPadding(0, 0, 0, dp(16))
         })
         root.addView(TextView(this).apply {
-            text = if (ayat) AYAT else TEXT
+            text = when { ayat -> AYAT; parents -> PARENTS; else -> TEXT }
             textSize = 18f
             setLineSpacing(0f, 1.35f)
             setTextColor(Color.rgb(0xEE, 0xEE, 0xF2))
@@ -48,7 +50,7 @@ class GuideActivity : Activity() {
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW,
                         Uri.parse("https://www.google.com/search?q=" + Uri.encode(
-                            if (ayat) "طریقه خواندن نماز آیات" else "طریقه خواندن نماز شب"))))
+                            when { ayat -> "طریقه خواندن نماز آیات"; parents -> "طریقه خواندن نماز والدین"; else -> "طریقه خواندن نماز شب" }))))
                 } catch (_: Exception) {}
             }
         })
@@ -72,7 +74,33 @@ class GuideActivity : Activity() {
 
     companion object {
         const val EXTRA_KIND = "kind"
+        const val KIND_NIGHT = "night"
         const val KIND_AYAT = "ayat"
+        const val KIND_PARENTS = "parents"
+
+        val PARENTS = """
+نماز والدین (نماز برای پدر و مادر) دو رکعت است و مانند نماز صبح خوانده می‌شود. این نماز مستحب است؛ آن را به نیت رجاء بخوانید.
+
+نیت: «دو رکعت نماز والدین می‌خوانم قربةً الی الله».
+
+رکعت اول
+پس از سورهٔ حمد، ده بار:
+«رَبَّنَا اغْفِرْ لی وَ لِوالِدَیَّ وَ لِلْمُؤْمِنینَ یَوْمَ یَقُومُ الْحِسابُ»
+سپس رکوع و دو سجده.
+
+رکعت دوم
+پس از سورهٔ حمد، ده بار:
+«رَبِّ اغْفِرْ لی وَ لِوالِدَیَّ وَ لِمَنْ دَخَلَ بَیْتِیَ مُؤْمِناً وَ لِلْمُؤْمِنینَ وَ الْمُؤْمِناتِ»
+سپس قنوت، رکوع، دو سجده، تشهد و سلام.
+
+پس از سلام، ده بار:
+«رَبِّ ارْحَمْهُما کَما رَبَّیانی صَغیراً»
+
+📌 نکته‌ها
+• برای پدر و مادر زنده یا درگذشته، هر دو، خوانده می‌شود.
+• پس از نماز، برای پدر و مادر دعا و طلب آمرزش کنید.
+• برای جزئیات به کتاب‌های دعا (مانند مفاتیح‌الجنان) یا رسالهٔ مرجع تقلید خود مراجعه کنید.
+""".trim()
 
         val AYAT = """
 نماز آیات دو رکعت است و هر رکعت آن پنج رکوع دارد.

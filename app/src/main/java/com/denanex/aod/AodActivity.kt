@@ -2,6 +2,9 @@ package com.denanex.aod
 
 import android.app.Activity
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.GestureDetector
@@ -10,14 +13,17 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.widget.Toast
 
 /**
  * نمایش تمام‌صفحهٔ ساعت (روی صفحهٔ قفل هم). صفحه روشن می‌ماند با نور کم.
- * نگه داشتن: تنظیمات — دو ضربه: خروج. (راهنمای نماز شب و نماز آیات فقط در تنظیمات است.)
+ * نگه داشتن: تنظیمات — دو ضربه: خروج — ضربه روی آیکون آب‌وهوا: نام شهر و وضعیت هوا —
+ * ضربه روی نوار پایین: راهنمای نماز شب / آیات / والدین. با آلبوم عکس، موزیک پس‌زمینهٔ انتخابی پخش می‌شود.
  */
 class AodActivity : Activity() {
 
     private lateinit var view: ClockView
+    private var music: MediaPlayer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +49,12 @@ class AodActivity : Activity() {
             override fun onDown(e: MotionEvent) = true
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 // لمس صفحه شکل ساعت را عوض نمی‌کند (شکل فقط از تنظیمات)
+                when (val hit = view.hitTest(e.x, e.y)) {
+                    null -> {}
+                    "weather" -> Toast.makeText(this@AodActivity, view.weatherText(), Toast.LENGTH_LONG).show()
+                    else -> startActivity(Intent(this@AodActivity, GuideActivity::class.java)
+                        .putExtra(GuideActivity.EXTRA_KIND, hit))
+                }
                 return true
             }
             override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -76,9 +88,34 @@ class AodActivity : Activity() {
         view.prefs.applyBrightness(window, 0f)
         view.start()
         FajrBeep.scheduleAll(this)
+        startMusic()
+    }
+
+    /** موزیک پس‌زمینهٔ آلبوم عکس (فایل انتخابی کاربر، تکرار پشت سر هم). */
+    private fun startMusic() {
+        stopMusic()
+        val p = view.prefs
+        if (!p.album || !p.albumMusic || p.albumMusicUri.isEmpty() || AlbumStore.count(this) == 0) return
+        music = try {
+            MediaPlayer().apply {
+                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                setDataSource(this@AodActivity, Uri.parse(p.albumMusicUri))
+                isLooping = true
+                setVolume(0.6f, 0.6f)
+                prepare()
+                start()
+            }
+        } catch (_: Exception) { null }
+    }
+
+    private fun stopMusic() {
+        music?.let { try { it.stop() } catch (_: Exception) {}; try { it.release() } catch (_: Exception) {} }
+        music = null
     }
 
     override fun onPause() {
+        stopMusic()
         view.stop()
         super.onPause()
     }

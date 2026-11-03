@@ -47,6 +47,11 @@ class SettingsActivity : Activity() {
     private lateinit var roosterSound: TextView
     private lateinit var adhanInfo: TextView
     private lateinit var adhanSound: TextView
+    private lateinit var albumInfo: TextView
+    private lateinit var albumMusicInfo: TextView
+    private lateinit var gpsSwitch: Switch
+    private lateinit var albumSwitch: Switch
+    private lateinit var albumMusicSwitch: Switch
     private lateinit var provSpinner: Spinner
     private lateinit var citySpinner: Spinner
     private val styleCards = ArrayList<LinearLayout>()
@@ -99,6 +104,9 @@ class SettingsActivity : Activity() {
         root.addView(bigButton("▶  نمایش ساعت") {
             startActivity(Intent(this, AodActivity::class.java))
         })
+        // شکل ساعت، درست زیر «نمایش ساعت»
+        section(root, "شکل ساعت")
+        root.addView(styleGallery())
         root.addView(bigButton("🌅  پیش‌نمایش طلوع (حدود ۱ دقیقه)") {
             startActivity(Intent(this, AodActivity::class.java).putExtra(AodActivity.EXTRA_DEMO, true))
         })
@@ -109,12 +117,15 @@ class SettingsActivity : Activity() {
         section(root, "📍 استان و شهر (افق شرعی، آب‌وهوا و قبله)")
         root.addView(locationRows())
         root.addView(bigButton("📍  تعیین شهر با GPS") { useMyLocation() })
+        gpsSwitch = switch("GPS خودکار: هر ۱۰ دقیقه یک بار شهر به‌روز شود (بعد GPS خاموش می‌شود)", prefs.gpsAuto) {
+            prefs.gpsAuto = it
+            if (it) { prefs.gpsLastTry = 0L; LocationAuto.maybeUpdate(this) { showCity(prefs.location()); refresh() } }
+        }
+        root.addView(gpsSwitch)
         sunInfo = hint("")
         root.addView(sunInfo)
 
         // ---------------- ظاهر ----------------
-        section(root, "شکل ساعت")
-        root.addView(styleGallery())
         section(root, "رنگ")
         root.addView(colorRow())
         root.addView(hint("رنگ انتخابی: " + Prefs.colorNames[prefs.color]).also { colorName = it })
@@ -169,9 +180,12 @@ class SettingsActivity : Activity() {
         // ---------------- اذان ----------------
         section(root, "🕌 پخش اذان")
         root.addView(spinner("اذان", arrayOf("خاموش", "شیعه — ۳ وقت (صبح، ظهر، مغرب)",
-            "اهل سنت — ۵ وقت (صبح، ظهر، عصر، مغرب، عشا)"), prefs.adhanMode) {
+            "اهل سنت — ۵ وقت (صبح، ظهر، عصر، مغرب، عشا)"), prefs.adhanMode, green = true) {
             prefs.adhanMode = it; askNotifications(); Adhan.schedule(this); refresh()
         })
+        root.addView(switch("پیش از اذان، «اذان … به افق …» با صدا گفته شود", prefs.announceCity) { prefs.announceCity = it })
+        root.addView(hint("هنگام اذان، پنجره‌ای با «اذان … به افق شهر» و دکمه‌های «قطع» و «ادامهٔ اذان» باز می‌شود. " +
+            "گفتن نام شهر با صدا فقط وقتی کار می‌کند که موتور گفتار فارسی روی گوشی نصب باشد؛ وگرنه فقط اذان پخش می‌شود."))
         root.addView(switch("اهل سنت: عصر به مذهب حنفی (سایه دو برابر)", prefs.asrHanafi) {
             prefs.asrHanafi = it; Adhan.schedule(this); refresh()
         })
@@ -204,20 +218,48 @@ class SettingsActivity : Activity() {
         root.addView(roosterInfo)
         root.addView(rowButtons("▶  آزمایش" to { Rooster.play(this) }, "■  قطع" to { SoundService.stop(this) }))
 
-        // ---------------- نماز شب و نماز آیات ----------------
-        section(root, "🌙 نماز شب و نماز آیات")
+        // ---------------- نماز شب، نماز آیات و نماز والدین ----------------
+        section(root, "🌙 نماز شب، نماز آیات و نماز والدین")
         root.addView(bigButton("🌙  راهنمای نماز شب") {
-            startActivity(Intent(this, GuideActivity::class.java))
+            startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_NIGHT))
         })
         root.addView(bigButton("🌘  راهنمای نماز آیات") {
             startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_AYAT))
         })
+        root.addView(bigButton("🤲  راهنمای نماز والدین") {
+            startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_PARENTS))
+        })
+        root.addView(hint("نمایش در نوار پایین صفحهٔ ساعت (با یک ضربه باز می‌شود):"))
+        root.addView(switch("نماز شب", prefs.barNight) { prefs.barNight = it; refresh() })
+        root.addView(switch("نماز آیات", prefs.barAyat) { prefs.barAyat = it; refresh() })
+        root.addView(switch("نماز والدین", prefs.barParents) { prefs.barParents = it; refresh() })
         root.addView(switch("بیپ هر ۵ دقیقه از ۲۰ دقیقه مانده به اذان صبح", prefs.fajrBeep) {
             prefs.fajrBeep = it; FajrBeep.schedule(this)
         })
         root.addView(hint("۲۰، ۱۵، ۱۰ و ۵ دقیقه مانده: دو بیپ کوتاه — سر اذان: سه بیپ بلند. " +
             "حتی وقتی اپ بسته است هم بیپ می‌زند. بلندی صدا = صدای «زنگ هشدار» گوشی."))
-        root.addView(bigButton("🔔  آزمایش بیپ") { FajrBeep.play(5) })
+
+        // ---------------- آلبوم عکس ----------------
+        section(root, "🖼 آلبوم عکس (اختیاری)")
+        albumSwitch = switch("نمایش آلبوم عکس بالای صفحهٔ ساعت", prefs.album) { prefs.album = it; refresh() }
+        root.addView(albumSwitch)
+        root.addView(hint("هر ۴ ثانیه یک عکس با افکت تصادفی؛ پس از آخرین عکس دوباره از اول. عکس‌ها کوچک‌شده در پوشهٔ خود " +
+            "برنامه ذخیره می‌شوند و با به‌روزرسانی برنامه پاک نمی‌شوند. (در حالت افقی نمایش داده نمی‌شود.)"))
+        albumInfo = hint("")
+        root.addView(albumInfo)
+        root.addView(bigButton("➕  افزودن عکس از گالری") { pickImages() })
+        root.addView(bigButton("🗑  پاک کردن همهٔ عکس‌های آلبوم") {
+            android.app.AlertDialog.Builder(this)
+                .setMessage("همهٔ عکس‌های آلبوم ساعت پاک شوند؟ (عکس‌های اصلی گالری دست نمی‌خورند.)")
+                .setPositiveButton("پاک شود") { _, _ -> AlbumStore.clear(this); refresh() }
+                .setNegativeButton("نه", null).show()
+        })
+        root.addView(spinner("قاب عکس", arrayOf("دایره", "مربع"), prefs.albumShape) { prefs.albumShape = it; refresh() })
+        albumMusicSwitch = switch("موزیک پس‌زمینه هنگام نمایش آلبوم", prefs.albumMusic) { prefs.albumMusic = it; refresh() }
+        root.addView(albumMusicSwitch)
+        albumMusicInfo = hint("")
+        root.addView(albumMusicInfo)
+        root.addView(bigButton("🎵  انتخاب موزیک از گوشی") { pickAudio(REQ_ALBUM_MUSIC) })
 
         // ---------------- صفحه ----------------
         section(root, "صفحه")
@@ -342,6 +384,8 @@ class SettingsActivity : Activity() {
             bundled -> "اذان همراه برنامه"
             else -> "زنگ هشدار گوشی (فایل اذان همراه برنامه هنوز اضافه نشده؛ می‌توانید از گوشی انتخاب کنید)"
         }
+        albumInfo.text = "تعداد عکس‌های آلبوم: " + Persian.digits(AlbumStore.count(this).toString())
+        albumMusicInfo.text = "موزیک: " + (if (prefs.albumMusicUri.isNotEmpty()) "«${prefs.albumMusicName}»" else "انتخاب نشده")
         roosterSound.text = "صدا: " + if (prefs.roosterUri.isNotEmpty()) "فایل انتخابی «${prefs.roosterUriName}»" else "صدای خروس"
 
         if (sr == null) { sunInfo.text = ""; roosterInfo.text = ""; return }
@@ -461,8 +505,15 @@ class SettingsActivity : Activity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        box.addView(labeled("استان", provSpinner))
-        box.addView(labeled("شهر", citySpinner))
+        // استان و شهر در یک سطر
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(6), 0, dp(6))
+        }
+        row.addView(provSpinner, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+        row.addView(citySpinner, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(row)
         return box
     }
 
@@ -477,6 +528,8 @@ class SettingsActivity : Activity() {
     }
 
     private fun selectCity(c: City) {
+        // انتخاب دستی شهر، GPS خودکار را خاموش می‌کند
+        if (prefs.gpsAuto) { prefs.gpsAuto = false; gpsSwitch.isChecked = false }
         prefs.setCity(c)
         FajrBeep.scheduleAll(this)
         refresh()
@@ -554,6 +607,10 @@ class SettingsActivity : Activity() {
 
     /** نزدیک‌ترین شهر کشور به موقعیت گوشی را انتخاب می‌کند. */
     private fun saveLocation(l: Location) {
+        // پس از تعیین شهر با GPS، هر ۱۰ دقیقه خودکار به‌روز شود
+        prefs.gpsAuto = true
+        prefs.gpsLastTry = System.currentTimeMillis()
+        gpsSwitch.isChecked = true
         val c = Cities.nearest(this, l.latitude, l.longitude)
         val km = Cities.distKm(l.latitude, l.longitude, c.lat, c.lon)
         prefs.setCity(c)
@@ -586,10 +643,43 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /** کلیدهای آلبوم را با تنظیم ذخیره‌شده هماهنگ می‌کند (پس از افزودن عکس یا موزیک). */
+    private fun recreateAlbumSwitchState() {
+        if (albumSwitch.isChecked != prefs.album) albumSwitch.isChecked = prefs.album
+        if (albumMusicSwitch.isChecked != prefs.albumMusic) albumMusicSwitch.isChecked = prefs.albumMusic
+    }
+
+    private fun pickImages() {
+        val i = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        try {
+            startActivityForResult(Intent.createChooser(i, "انتخاب عکس‌ها"), REQ_ALBUM_IMAGES)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "برنامهٔ گالری پیدا نشد", Toast.LENGTH_LONG).show()
+        }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK) return
+        if (requestCode == REQ_ALBUM_IMAGES) {
+            val uris = ArrayList<Uri>()
+            data?.clipData?.let { cd -> for (k in 0 until cd.itemCount) cd.getItemAt(k).uri?.let { uris.add(it) } }
+            if (uris.isEmpty()) data?.data?.let { uris.add(it) }
+            if (uris.isEmpty()) return
+            Toast.makeText(this, "در حال افزودن " + Persian.digits(uris.size.toString()) + " عکس…", Toast.LENGTH_SHORT).show()
+            AlbumStore.import(this, uris) { n ->
+                if (!prefs.album && n > 0) prefs.album = true
+                Toast.makeText(this, Persian.digits(n.toString()) + " عکس به آلبوم اضافه شد", Toast.LENGTH_LONG).show()
+                recreateAlbumSwitchState()
+                refresh()
+            }
+            return
+        }
         val uri = data?.data ?: return
         try {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -598,6 +688,7 @@ class SettingsActivity : Activity() {
         when (requestCode) {
             REQ_ROOSTER_FILE -> { prefs.roosterUri = uri.toString(); prefs.roosterUriName = name }
             REQ_ADHAN_FILE -> { prefs.adhanUri = uri.toString(); prefs.adhanUriName = name }
+            REQ_ALBUM_MUSIC -> { prefs.albumMusicUri = uri.toString(); prefs.albumMusicName = name; prefs.albumMusic = true; recreateAlbumSwitchState() }
         }
         refresh()
     }
@@ -667,9 +758,11 @@ class SettingsActivity : Activity() {
         setOnCheckedChangeListener { _, b -> onChange(b) }
     }
 
-    private fun spinner(label: String, items: Array<String>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
+    private fun spinner(label: String, items: Array<String>, selected: Int, green: Boolean = false,
+                        onPick: (Int) -> Unit): LinearLayout {
         val sp = Spinner(this)
-        sp.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
+        sp.adapter = if (green) greenAdapter(items.toList())
+                     else ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
         sp.setSelection(selected.coerceIn(0, items.size - 1), false)
         sp.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             private var cur = selected
@@ -717,6 +810,8 @@ class SettingsActivity : Activity() {
         private const val REQ_NOTIF = 8
         private const val REQ_ROOSTER_FILE = 21
         private const val REQ_ADHAN_FILE = 22
+        private const val REQ_ALBUM_IMAGES = 23
+        private const val REQ_ALBUM_MUSIC = 24
         private const val IDLE_MS = 2 * 60_000L
         /** سبز فسفری کم‌رنگ برای استان و شهر انتخاب‌شده. */
         private val SELECTED_GREEN = Color.rgb(0x9C, 0xF0, 0x8A)
