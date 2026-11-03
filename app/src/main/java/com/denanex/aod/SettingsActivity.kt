@@ -101,6 +101,9 @@ class SettingsActivity : Activity() {
         root.addView(bigButton("▶  نمایش ساعت") {
             startActivity(Intent(this, AodActivity::class.java))
         })
+        root.addView(bigButton("🕋  قبله‌نما، اوقات شرعی و سه سلام") {
+            startActivity(Intent(this, PrayerActivity::class.java))
+        })
         // شکل ساعت، درست زیر «نمایش ساعت»
         section(root, "شکل ساعت")
         root.addView(styleGallery())

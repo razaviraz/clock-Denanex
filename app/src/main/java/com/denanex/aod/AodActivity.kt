@@ -51,6 +51,7 @@ class AodActivity : Activity() {
                 when (val hit = view.hitTest(e.x, e.y)) {
                     null -> {}
                     "weather" -> Weather.showDialog(this@AodActivity)   // وضعیت الان و پیش‌بینی ۷ روزه
+                    "prayer" -> startActivity(Intent(this@AodActivity, PrayerActivity::class.java))   // قبله‌نما و سه سلام
                     else -> startActivity(Intent(this@AodActivity, GuideActivity::class.java)
                         .putExtra(GuideActivity.EXTRA_KIND, hit))
                 }
