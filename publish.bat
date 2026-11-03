@@ -3,6 +3,7 @@ rem Build "Clock Denanex" and upload it (target in publish.properties). Turn VPN
 rem Gradle 8.7 runs only on Java 17..21. With Java 22+ (e.g. 25) the build fails with just
 rem "What went wrong: 25.0.3", so every Java found is checked and only 17..21 is used.
 setlocal EnableDelayedExpansion
+echo ===== publish.bat (version 2026-11-03b: Java 17-21 check, opens APK folder) =====
 set "JH="
 
 rem 1) Android Studio's own Java (jbr) and JAVA_HOME
@@ -40,8 +41,23 @@ echo Using Java: !JAVA_HOME!
 "!JAVA_HOME!\bin\java.exe" -version
 cd /d "%~dp0"
 call gradlew.bat publishApk
+if errorlevel 1 (
+  echo.
+  echo ===== FAILED: see the error above. Take a photo of this window and send it to Claude. =====
+  pause
+  exit /b 1
+)
 echo.
-echo ===== DONE (if you see BUILD SUCCESSFUL above, it worked) =====
+echo ===== SUCCESS: built and uploaded. =====
+rem The new APK: phones get it with "check for update" in the app, or copy it to the phone and install it.
+set "APKDIR="
+if exist "app\build\outputs\apk\release\aod.apk" set "APKDIR=app\build\outputs\apk\release"
+if not defined APKDIR if exist "app\build\outputs\apk\debug\aod.apk" set "APKDIR=app\build\outputs\apk\debug"
+if defined APKDIR (
+  echo The APK file: %~dp0!APKDIR!\aod.apk
+  echo Opening that folder...
+  start "" explorer /select,"%~dp0!APKDIR!\aod.apk"
+)
 pause
 exit /b 0
 
