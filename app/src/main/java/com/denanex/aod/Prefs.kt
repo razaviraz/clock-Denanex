@@ -116,13 +116,13 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit().putBoolean("sky_arc", v).apply()
     // ---------------- نوار پایین صفحهٔ ساعت (راهنماها) ----------------
     var barNight: Boolean
-        get() = sp.getBoolean("bar_night", true)
+        get() = sp.getBoolean("bar_night", false)
         set(v) = sp.edit().putBoolean("bar_night", v).apply()
     var barAyat: Boolean
-        get() = sp.getBoolean("bar_ayat", true)
+        get() = sp.getBoolean("bar_ayat", false)
         set(v) = sp.edit().putBoolean("bar_ayat", v).apply()
     var barParents: Boolean
-        get() = sp.getBoolean("bar_parents", true)
+        get() = sp.getBoolean("bar_parents", false)
         set(v) = sp.edit().putBoolean("bar_parents", v).apply()
 
     // ---------------- GPS خودکار ----------------

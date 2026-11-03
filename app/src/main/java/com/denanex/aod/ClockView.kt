@@ -386,9 +386,9 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
                     else -> if (portrait) h * 0.37f else h * 0.30f
                 }) + dy
                 when (style) {
-                    0 -> drawTimeLine(canvas, cx, cy, if (portrait) w * 0.88f else w * 0.55f,
+                    0 -> drawTimeLine(canvas, cx, cy, if (portrait) w * 0.84f else w * 0.55f,
                         if (portrait) h * 0.20f else h * 0.30f, tfThin, color)
-                    1 -> drawTimeLine(canvas, cx, cy, if (portrait) w * 0.88f else w * 0.55f,
+                    1 -> drawTimeLine(canvas, cx, cy, if (portrait) w * 0.84f else w * 0.55f,
                         if (portrait) h * 0.20f else h * 0.30f, tfBlack, color)
                     2 -> drawStacked(canvas, cx, cy, w, h, color)
                     else -> drawAnalog(canvas, cx, cy, analogRadius(style, w, h), color, style, w, h)
@@ -442,7 +442,9 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
     /** اندازهٔ قلم تا متن [sample] دقیقاً پهنای [targetW] شود، و ارتفاعش از [maxH] بیشتر نشود. */
     private fun fit(p: Paint, sample: String, targetW: Float, maxH: Float) {
         p.textSize = 100f
-        val mw = p.measureText(sample)
+        // همان پهنایی که drawFixed رسم می‌کند (رقم‌های هم‌پهنا)، نه پهنای عادی نوشته؛
+        // وگرنه رقم‌های پهن از کادر بیرون می‌زنند
+        val mw = fixedWidth(sample, p)
         var size = if (mw > 0f) 100f * targetW / mw else 100f
         size = min(size, maxH / 0.75f)
         p.textSize = size
