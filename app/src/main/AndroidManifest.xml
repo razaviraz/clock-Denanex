@@ -10,6 +10,11 @@
     <!-- به‌روزرسانی خودکار از drive.denanex.ir/update -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- پخش اذان و زنگ پیش از طلوع تا آخر، حتی وقتی اپ بسته است (سرویس پیش‌زمینه با اعلان «قطع») -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -39,7 +44,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
 
-        <!-- راهنمای نماز شب -->
+        <!-- راهنمای نماز شب و نماز آیات -->
         <activity
             android:name=".GuideActivity"
             android:exported="false"
@@ -47,8 +52,13 @@
 
         <!-- بیپ پیش از اذان صبح -->
         <receiver android:name=".BeepReceiver" android:exported="false" />
-        <!-- صدای خروس پیش از طلوع آفتاب -->
+        <!-- زنگ پیش از طلوع آفتاب و اذان -->
         <receiver android:name=".RoosterReceiver" android:exported="false" />
+        <receiver android:name=".AdhanReceiver" android:exported="false" />
+        <service
+            android:name=".SoundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
         <receiver android:name=".InstallReceiver" android:exported="false" />
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

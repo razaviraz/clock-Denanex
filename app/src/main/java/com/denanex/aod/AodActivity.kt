@@ -13,7 +13,7 @@ import android.view.WindowManager
 
 /**
  * نمایش تمام‌صفحهٔ ساعت (روی صفحهٔ قفل هم). صفحه روشن می‌ماند با نور کم.
- * نگه داشتن: تنظیمات — دو ضربه: خروج — ضربه روی «راهنمای نماز شب»: راهنما.
+ * نگه داشتن: تنظیمات — دو ضربه: خروج. (راهنمای نماز شب و نماز آیات فقط در تنظیمات است.)
  */
 class AodActivity : Activity() {
 
@@ -42,10 +42,7 @@ class AodActivity : Activity() {
         val gd = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent) = true
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                // لمس صفحه شکل ساعت را عوض نمی‌کند (شکل فقط از تنظیمات)؛ فقط خط «راهنمای نماز شب» باز می‌شود
-                if (view.guideRect.contains(e.x, e.y)) {
-                    startActivity(Intent(this@AodActivity, GuideActivity::class.java))
-                }
+                // لمس صفحه شکل ساعت را عوض نمی‌کند (شکل فقط از تنظیمات)
                 return true
             }
             override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -59,12 +56,17 @@ class AodActivity : Activity() {
         })
         view.setOnTouchListener { _, ev -> gd.onTouchEvent(ev) }
 
-        if (intent?.getBooleanExtra(EXTRA_DEMO, false) == true) view.startDemo()
+        demo(intent)
+    }
+
+    private fun demo(i: Intent?) {
+        if (i?.getBooleanExtra(EXTRA_DEMO, false) == true) view.startDemo(sunset = false)
+        else if (i?.getBooleanExtra(EXTRA_DEMO_SUNSET, false) == true) view.startDemo(sunset = true)
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        if (intent?.getBooleanExtra(EXTRA_DEMO, false) == true) view.startDemo()
+        demo(intent)
     }
 
     override fun onResume() {
@@ -104,5 +106,6 @@ class AodActivity : Activity() {
 
     companion object {
         const val EXTRA_DEMO = "demo"
+        const val EXTRA_DEMO_SUNSET = "demo_sunset"
     }
 }
