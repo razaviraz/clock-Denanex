@@ -13,9 +13,14 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.widget.Toast
+import org.json.JSONException
 import org.json.JSONObject
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 
 /**
  * به‌روزرسانی خودکار از drive.denanex.ir/update (همان‌جا که تسک publishApk می‌فرستد).
@@ -43,37 +48,91 @@ object Updater {
         ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: ""
     } catch (_: Exception) { "" }
 
-    private fun fetch(): Info? = try {
-        val c = URL(JSON_URL + "?t=" + System.currentTimeMillis()).openConnection() as HttpURLConnection
-        c.connectTimeout = 10_000
-        c.readTimeout = 15_000
-        c.useCaches = false
-        c.setRequestProperty("Cache-Control", "no-cache")
-        if (c.responseCode != 200) { c.disconnect(); null } else {
-            val t = c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            c.disconnect()
-            val o = JSONObject(t)
-            val apk = o.optString("apk", "aod.apk")
-            Info(o.optLong("version_code"), o.optString("version_name", "?"),
-                if (apk.startsWith("http")) apk else BASE + apk, o.optString("notes", ""))
-        }
-    } catch (_: Exception) { null }
+    /** نتیجهٔ بررسی: یا [info] یا توضیح فارسی خطا در [error]. */
+    private class Fetch(val info: Info?, val error: String?)
 
-    /** بررسی نسخهٔ تازه؛ [manual] = کاربر خودش دکمه را زده (پیام «به‌روز است» هم نشان داده شود). */
+    private fun fetchOnce(): Fetch {
+        var c: HttpURLConnection? = null
+        return try {
+            c = URL(JSON_URL + "?t=" + System.currentTimeMillis()).openConnection() as HttpURLConnection
+            c.connectTimeout = 12_000
+            c.readTimeout = 15_000
+            c.useCaches = false
+            c.setRequestProperty("Cache-Control", "no-cache")
+            val code = c.responseCode
+            if (code != 200) {
+                Fetch(null, when (code) {
+                    404 -> "فایل aod.json روی سرور پیدا نشد (کد ۴۰۴). یک بار publish.bat را اجرا کنید " +
+                        "و مطمئن شوید پوشهٔ target همان پوشهٔ update سایت است."
+                    403 -> "سرور اجازهٔ دسترسی نداد (کد ۴۰۳). اگر VPN روشن است خاموش کنید."
+                    in 500..599 -> "سرور خطا داد (کد ${Persian.digits(code.toString())})."
+                    else -> "سرور پاسخ نامعمول داد (کد ${Persian.digits(code.toString())})."
+                })
+            } else {
+                val t = c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val o = JSONObject(t)
+                val apk = o.optString("apk", "aod.apk")
+                Fetch(Info(o.optLong("version_code"), o.optString("version_name", "?"),
+                    if (apk.startsWith("http")) apk else BASE + apk, o.optString("notes", "")), null)
+            }
+        } catch (e: UnknownHostException) {
+            Fetch(null, "نشانی سرور پیدا نشد. اینترنت گوشی وصل است؟")
+        } catch (e: SocketTimeoutException) {
+            Fetch(null, "سرور جواب نداد (زمان تمام شد). اگر VPN روشن است خاموش کنید و دوباره امتحان کنید.")
+        } catch (e: ConnectException) {
+            Fetch(null, "اتصال به سرور رد شد. اگر VPN روشن است خاموش کنید و دوباره امتحان کنید.")
+        } catch (e: SSLException) {
+            Fetch(null, "مشکل گواهی امنیتی (SSL) سرور: ${e.message ?: ""}\n" +
+                "گواهی سرور باید کامل (همراه گواهی میانی) و معتبر باشد.")
+        } catch (e: JSONException) {
+            Fetch(null, "فایل aod.json روی سرور خراب است یا صفحهٔ دیگری به‌جایش برمی‌گردد.")
+        } catch (e: Exception) {
+            Fetch(null, "خطا: ${e.javaClass.simpleName} ${e.message ?: ""}")
+        } finally {
+            try { c?.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    /** یک بار دوباره هم امتحان می‌کند (شبکه‌های موبایل گاهی بار اول وصل نمی‌شوند). */
+    private fun fetch(): Fetch {
+        val first = fetchOnce()
+        if (first.info != null) return first
+        try { Thread.sleep(1500) } catch (_: InterruptedException) {}
+        return fetchOnce()
+    }
+
+    /** بررسی نسخهٔ تازه؛ [manual] = کاربر خودش دکمه را زده (پیام «به‌روز است» یا علت خطا هم نشان داده شود). */
     fun check(act: Activity, manual: Boolean = false) {
         if (busy) return
         if (manual) Toast.makeText(act, "در حال بررسی به‌روزرسانی…", Toast.LENGTH_SHORT).show()
         Thread {
-            val info = fetch()
+            val r = fetch()
             main.post {
                 if (act.isFinishing || act.isDestroyed) return@post
+                val info = r.info
                 when {
-                    info == null -> if (manual) Toast.makeText(act, "اتصال به سرور به‌روزرسانی برقرار نشد", Toast.LENGTH_LONG).show()
+                    info == null -> if (manual) showError(act, r.error ?: "")
                     info.code > currentCode(act) -> offer(act, info)
                     manual -> Toast.makeText(act, "نسخهٔ شما به‌روز است ✓", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()
+    }
+
+    /** علت خطا، با دکمهٔ باز کردن نشانی در مرورگر (برای آزمایش یا دریافت دستی). */
+    private fun showError(act: Activity, why: String) {
+        AlertDialog.Builder(act)
+            .setTitle("اتصال به سرور به‌روزرسانی برقرار نشد")
+            .setMessage(why + "\n\nنشانی: " + JSON_URL +
+                "\n\nبرای آزمایش، «باز کردن در مرورگر» را بزنید: اگر در مرورگر هم باز نشد، مشکل از سرور یا اینترنت است.")
+            .setPositiveButton("باز کردن در مرورگر") { _, _ ->
+                try { act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(JSON_URL))) } catch (_: Exception) {}
+            }
+            .setNeutralButton("دریافت دستی APK") { _, _ ->
+                try { act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BASE + "aod.apk"))) } catch (_: Exception) {}
+            }
+            .setNegativeButton("بستن", null)
+            .show()
     }
 
     private fun offer(act: Activity, info: Info) {
