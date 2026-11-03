@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- فقط برای گزینهٔ «موقعیت من» (محاسبهٔ طلوع برای همان نقطه). بدون آن هم با فهرست شهرها کار می‌کند. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- بیپ دقیق پیش از اذان صبح (حتی وقتی اپ باز نیست) -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- به‌روزرسانی خودکار از drive.denanex.ir/update -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="ساعت همیشه‌روشن"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+
+        <!-- صفحهٔ تنظیمات (همان که با زدن آیکون باز می‌شود) -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- نمایش تمام‌صفحهٔ ساعت (روی صفحهٔ قفل هم می‌آید) -->
+        <activity
+            android:name=".AodActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- راهنمای نماز شب -->
+        <activity
+            android:name=".GuideActivity"
+            android:exported="false"
+            android:showWhenLocked="true" />
+
+        <!-- بیپ پیش از اذان صبح -->
+        <receiver android:name=".BeepReceiver" android:exported="false" />
+        <receiver android:name=".InstallReceiver" android:exported="false" />
+        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- «محافظ صفحه» اندروید: هنگام شارژ (یا روی پایه) خودکار ساعت را نشان می‌دهد -->
+        <service
+            android:name=".AodDream"
+            android:exported="true"
+            android:label="ساعت همیشه‌روشن"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

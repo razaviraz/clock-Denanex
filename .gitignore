@@ -1,0 +1,18 @@
+# خروجی ساخت و فایل‌های محلی
+/build/
+/app/build/
+/.gradle/
+/.idea/
+/.kotlin/
+*.iml
+/local.properties
+/captures/
+.DS_Store
+
+# امضا و انتشار (رمزها و نشانی سرور؛ هرگز commit نشود)
+keystore.properties
+publish.properties
+*.jks
+*.keystore
+*.apk
+*.aab

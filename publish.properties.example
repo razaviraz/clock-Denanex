@@ -1,0 +1,4 @@
+# برای انتشار با publish.bat، این فایل را به نام publish.properties کپی کنید (در گیت نمی‌رود).
+# مقصد scp: نام میزبان SSH (از ‎~/.ssh/config‎) و پوشه‌ای که در نشانی update اپ سرو می‌شود
+# (اپ نسخهٔ جدید را از https://drive.denanex.ir/update/aod.json می‌خواند — Updater.kt).
+target=myserver:/var/www/update/
