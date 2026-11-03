@@ -13,7 +13,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.widget.Toast
 
 /**
  * نمایش تمام‌صفحهٔ ساعت (روی صفحهٔ قفل هم). صفحه روشن می‌ماند با نور کم.
@@ -51,7 +50,7 @@ class AodActivity : Activity() {
                 // لمس صفحه شکل ساعت را عوض نمی‌کند (شکل فقط از تنظیمات)
                 when (val hit = view.hitTest(e.x, e.y)) {
                     null -> {}
-                    "weather" -> Toast.makeText(this@AodActivity, view.weatherText(), Toast.LENGTH_LONG).show()
+                    "weather" -> Weather.showDialog(this@AodActivity)   // وضعیت الان و پیش‌بینی ۷ روزه
                     else -> startActivity(Intent(this@AodActivity, GuideActivity::class.java)
                         .putExtra(GuideActivity.EXTRA_KIND, hit))
                 }
@@ -69,6 +68,8 @@ class AodActivity : Activity() {
         view.setOnTouchListener { _, ev -> gd.onTouchEvent(ev) }
 
         demo(intent)
+        // با هر بار باز شدن ساعت هم نسخهٔ تازه بررسی شود (اگر بود، با انتخاب کاربر دانلود و نصب)
+        if (savedInstanceState == null) Updater.check(this)
     }
 
     private fun demo(i: Intent?) {
