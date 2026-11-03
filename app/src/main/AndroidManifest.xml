@@ -64,6 +64,13 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
+        <!-- قبله‌نما، اوقات شرعی و سه سلام -->
+        <activity
+            android:name=".PrayerActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:showWhenLocked="true" />
+
         <!-- راهنمای نماز شب، نماز آیات و نماز والدین -->
         <activity
             android:name=".GuideActivity"

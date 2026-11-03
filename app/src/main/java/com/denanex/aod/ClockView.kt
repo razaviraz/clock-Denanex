@@ -112,12 +112,15 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
 
     /** جای آیکون آب‌وهوا روی صفحه (برای ضربه: نمایش نام شهر). */
     val weatherRect = RectF()
+    /** وسط ساعت آنالوگ (قبله‌نما): با ضربه، صفحهٔ قبله‌نما و سه سلام باز می‌شود. */
+    val compassRect = RectF()
     /** دکمه‌های نوار پایین (راهنماها): جای هر کدام و نوع راهنما. */
     val guideRects = ArrayList<Pair<RectF, String>>()
 
     /** آنچه زیر نقطهٔ ([x]، [y]) است: «weather» یا نوع راهنما (night/ayat/parents)، یا null. */
     fun hitTest(x: Float, y: Float): String? {
         if (prefs.weather && weatherNow != null && weatherRect.contains(x, y)) return "weather"
+        if (prefs.style >= 3 && compassRect.contains(x, y)) return "prayer"
         for ((r, kind) in guideRects) if (r.contains(x, y)) return kind
         return null
     }
@@ -617,6 +620,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
 
         // قطب‌نما و قبله، زیر عقربه‌ها
         if (!preview && prefs.qibla) drawQibla(c, cx, cy, r)
+        if (!preview) compassRect.set(cx - r * 0.55f, cy - r * 0.55f, cx + r * 0.55f, cy + r * 0.55f)
 
         val thin = style == 4
         hand(c, cx, cy, hour * 30f, r * 0.52f, if (thin) r * 0.035f else r * 0.06f, color, 255)
