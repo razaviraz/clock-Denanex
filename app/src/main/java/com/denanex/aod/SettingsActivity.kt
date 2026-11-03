@@ -139,6 +139,7 @@ class SettingsActivity : Activity() {
         })
         root.addView(hint("در حالت افقی، شکل «آنالوگ + دیجیتال درشت»: آنالوگ سمت راست و دیجیتال سمت چپ."))
         root.addView(switch("درصد باتری", prefs.showBattery) { prefs.showBattery = it; refresh() })
+        root.addView(switch("آیکون کعبه کنار باتری (با ضربه، قبله‌نما باز می‌شود)", prefs.kaabaIcon) { prefs.kaabaIcon = it; refresh() })
         root.addView(switch("آب‌وهوای شهر (آیکون و دما، از اینترنت)", prefs.weather) { prefs.weather = it; refresh() })
         root.addView(switch("قبله‌نما و قطب‌نما وسط ساعت آنالوگ", prefs.qibla) { prefs.qibla = it; refresh() })
         root.addView(hint("کعبه در جهت قبله و «ش» (مثلث قرمز) سمت شمال نشان داده می‌شود؛ با حسگر قطب‌نمای گوشی و موقعیت شهر. " +

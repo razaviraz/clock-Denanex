@@ -114,6 +114,8 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
     val weatherRect = RectF()
     /** وسط ساعت آنالوگ (قبله‌نما): با ضربه، صفحهٔ قبله‌نما و سه سلام باز می‌شود. */
     val compassRect = RectF()
+    /** آیکون کعبه هم‌ردیف باتری: با ضربه، صفحهٔ قبله‌نما باز می‌شود. */
+    val kaabaRect = RectF()
     /** دکمه‌های نوار پایین (راهنماها): جای هر کدام و نوع راهنما. */
     val guideRects = ArrayList<Pair<RectF, String>>()
 
@@ -121,6 +123,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
     fun hitTest(x: Float, y: Float): String? {
         if (prefs.weather && weatherNow != null && weatherRect.contains(x, y)) return "weather"
         if (prefs.style >= 3 && compassRect.contains(x, y)) return "prayer"
+        if (prefs.kaabaIcon && kaabaRect.contains(x, y)) return "prayer"
         for ((r, kind) in guideRects) if (r.contains(x, y)) return kind
         return null
     }
@@ -812,6 +815,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         val hol = Hijri.holiday(j[1], j[2], Hijri.fromGregorian(gy, gm, gd, prefs.hijriOffset))
         val friday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
         val dates = dateLines()
+        kaabaRect.setEmpty()
         val batt = if (prefs.showBattery) battery(now) else ""
 
         if (dates.isNotEmpty()) {
@@ -830,6 +834,12 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
             val tw = smallPaint.measureText(line)
             if (tw > maxW) smallPaint.textSize = dateSize * maxW / tw
             c.drawText(line, cx, y, smallPaint)
+            // افقی: باتری در همین سطر است؛ آیکون کعبه با فاصله سمت چپ همین سطر
+            if (compact && batt.isNotEmpty() && prefs.kaabaIcon) {
+                val s = smallPaint.textSize * 1.3f
+                drawKaabaIcon(c, cx - min(tw, maxW) / 2f - smallPaint.textSize * 1.4f - s / 2f,
+                    y - smallPaint.textSize * 0.35f, s)
+            }
             smallPaint.color = color
             if (twoLines) {
                 val second = dates.drop(1).joinToString("  •  ")
@@ -872,14 +882,47 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
                 y += big * 1.3f
             }
         }
-        if (batt.isNotEmpty() && !(compact && dates.isNotEmpty())) {
-            // درصد باتری درشت و روشن
+        val battRow = batt.isNotEmpty() && !(compact && dates.isNotEmpty())
+        val kaabaInRow = prefs.kaabaIcon && !(compact && dates.isNotEmpty() && batt.isNotEmpty())
+        if (battRow || kaabaInRow) {
+            // درصد باتری درشت و روشن، و (اگر روشن باشد) آیکون کعبه با فاصله در همان سطر
             smallPaint.typeface = tfMedium
             smallPaint.alpha = 200
             smallPaint.textSize = base * (if (compact) 1.2f else 1.5f)
             y += base * 0.45f
-            c.drawText(batt, cx, y, smallPaint)
+            val bw = if (battRow) smallPaint.measureText(batt) else 0f
+            val s = smallPaint.textSize * 1.3f                       // اندازهٔ آیکون کعبه
+            val gap = if (battRow && kaabaInRow) smallPaint.textSize * 1.6f else 0f
+            val total = bw + gap + (if (kaabaInRow) s else 0f)
+            // راست به چپ: باتری سمت راست، کعبه سمت چپ
+            if (battRow) c.drawText(batt, cx + total / 2f - bw / 2f, y, smallPaint)
+            if (kaabaInRow) drawKaabaIcon(c, cx - total / 2f + s / 2f, y - smallPaint.textSize * 0.35f, s)
         }
+    }
+
+    /**
+     * آیکون کعبه (مکعب سیاه با لبهٔ روشن و نوار طلایی) به مرکز ([x]، [y]) و اندازهٔ [s]؛
+     * جای آن (کمی بزرگ‌تر، برای ضربهٔ راحت) در [kaabaRect] ذخیره می‌شود.
+     */
+    private fun drawKaabaIcon(c: Canvas, x: Float, y: Float, s: Float) {
+        val hw = s * 0.42f
+        val hh = s * 0.36f
+        // هالهٔ طلایی ملایم تا روی زمینهٔ سیاه دیده شود
+        skyPaint.shader = RadialGradient(x, y, s, intArrayOf(Color.argb(70, 0xE8, 0xC2, 0x5A), Color.TRANSPARENT),
+            null, Shader.TileMode.CLAMP)
+        c.drawCircle(x, y, s, skyPaint)
+        skyPaint.shader = null
+        fillPaint.color = Color.rgb(0x14, 0x14, 0x14)
+        fillPaint.alpha = 255
+        c.drawRect(x - hw, y - hh, x + hw, y + hh, fillPaint)
+        strokePaint.color = Color.rgb(0xB8, 0xB8, 0xB8)
+        strokePaint.alpha = 220
+        strokePaint.strokeWidth = max(1f, s * 0.05f)
+        c.drawRect(x - hw, y - hh, x + hw, y + hh, strokePaint)
+        fillPaint.color = KAABA_GOLD
+        c.drawRect(x - hw, y - hh * 0.45f, x + hw, y - hh * 0.15f, fillPaint)
+        c.drawRect(x + hw * 0.30f, y + hh * 0.10f, x + hw * 0.65f, y + hh * 0.85f, fillPaint)
+        kaabaRect.set(x - s * 1.1f, y - s * 1.1f, x + s * 1.1f, y + s * 1.1f)
     }
 
     /**
