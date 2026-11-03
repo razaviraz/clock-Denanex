@@ -122,6 +122,10 @@ class Prefs(ctx: Context) {
     var qibla: Boolean
         get() = sp.getBoolean("qibla", true)
         set(v) = sp.edit().putBoolean("qibla", v).apply()
+    /** آیکون کعبه هم‌ردیف باتری روی صفحهٔ ساعت (با ضربه، صفحهٔ قبله‌نما باز می‌شود). */
+    var kaabaIcon: Boolean
+        get() = sp.getBoolean("kaaba_icon", true)
+        set(v) = sp.edit().putBoolean("kaaba_icon", v).apply()
     /** کمان کم‌رنگ مسیر خورشید بالای صفحه، با طلوع و غروب خورشید و ماه. */
     var skyArc: Boolean
         get() = sp.getBoolean("sky_arc", true)
