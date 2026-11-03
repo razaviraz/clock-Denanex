@@ -267,7 +267,7 @@ class SettingsActivity : Activity() {
             setPadding(0, dp(28), 0, 0)
         })
         root.addView(TextView(this).apply {
-            text = Prefs.DEDICATION
+            text = Prefs.dedication()
             textSize = 14f
             setTextColor(Color.rgb(0xC8, 0xC8, 0xD0))
             gravity = Gravity.CENTER

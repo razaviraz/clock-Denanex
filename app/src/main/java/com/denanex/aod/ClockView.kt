@@ -122,16 +122,6 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         return null
     }
 
-    /** متن کوتاه آب‌وهوای شهر انتخابی (برای نمایش با ضربه روی آیکون). */
-    fun weatherText(): String {
-        val wn = weatherNow ?: return ""
-        val desc = when (Weather.kind(wn.code)) {
-            Weather.CLEAR -> "صاف"; Weather.PARTLY -> "نیمه‌ابری"; Weather.CLOUDY -> "ابری"
-            Weather.FOG -> "مه"; Weather.RAIN -> "بارانی"; Weather.SNOW -> "برفی"; else -> "رعد و برق"
-        }
-        val loc = prefs.location()
-        return "آب‌وهوای ${loc.name} (استان ${loc.province}): " + Persian.digits(wn.temp.roundToInt().toString()) + "° — $desc"
-    }
     private var qiblaDeg = 0.0
 
     // ستاره‌های آسمان نیمه‌شب (جای ثابت)
@@ -827,13 +817,26 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
             smallPaint.textSize = dateSize
             if (friday || hol != null) smallPaint.color = HOLIDAY_RED
             smallPaint.alpha = 235
-            // شمسی، قمری و میلادی در یک سطر؛ اگر جا نشد، قلم کوچک‌تر می‌شود تا در پهنای صفحه جا شود
-            val line = dates.joinToString("  •  ") + (if (compact && batt.isNotEmpty()) "   •   $batt" else "")
             val maxW = w * 0.94f
+            // ساعت پیش‌فرض (آنالوگ + دیجیتال، عمودی): شمسی درشت، و قمری و میلادی کوچک‌تر در سطر زیرش.
+            // بقیهٔ شکل‌ها: همه در یک سطر؛ اگر جا نشد، قلم کوچک‌تر می‌شود تا در پهنای صفحه جا شود
+            val twoLines = !compact && prefs.style == STYLE_ANALOG_DIGITAL && dates.size > 1
+            val line = if (twoLines) dates[0]
+                       else dates.joinToString("  •  ") + (if (compact && batt.isNotEmpty()) "   •   $batt" else "")
             val tw = smallPaint.measureText(line)
             if (tw > maxW) smallPaint.textSize = dateSize * maxW / tw
             c.drawText(line, cx, y, smallPaint)
             smallPaint.color = color
+            if (twoLines) {
+                val second = dates.drop(1).joinToString("  •  ")
+                smallPaint.typeface = tfLight
+                smallPaint.textSize = dateSize * 0.66f
+                smallPaint.alpha = 215
+                val tw2 = smallPaint.measureText(second)
+                if (tw2 > maxW) smallPaint.textSize *= maxW / tw2
+                y += smallPaint.textSize * 1.45f
+                c.drawText(second, cx, y, smallPaint)
+            }
             if (hol != null) {
                 y += base * 1.25f
                 smallPaint.typeface = tfLight

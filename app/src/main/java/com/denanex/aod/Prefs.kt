@@ -15,6 +15,15 @@ class Prefs(ctx: Context) {
         const val CREDIT = "تهیه‌کننده: محمد رضوی‌نژاد — التماس دعا 🤲"
         const val DEDICATION = "تقدیم به روح پاک سردار شهید سید جلال الدین توسلمند"
 
+        /** تقدیم‌نامه با کلمهٔ «شهید» به رنگ قرمز. */
+        fun dedication(): CharSequence {
+            val s = android.text.SpannableString(DEDICATION)
+            val i = DEDICATION.indexOf("شهید")
+            if (i >= 0) s.setSpan(android.text.style.ForegroundColorSpan(Color.rgb(0xFF, 0x4D, 0x4D)),
+                i, i + "شهید".length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            return s
+        }
+
         val styleNames = arrayOf(
             "دیجیتال باریک",
             "دیجیتال پررنگ",
@@ -99,11 +108,11 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit().putBoolean("show_date", v).apply()
     /** تاریخ قمری. */
     var showHijri: Boolean
-        get() = sp.getBoolean("show_hijri", false)
+        get() = sp.getBoolean("show_hijri", true)
         set(v) = sp.edit().putBoolean("show_hijri", v).apply()
     /** تاریخ میلادی. */
     var showGregorian: Boolean
-        get() = sp.getBoolean("show_greg", false)
+        get() = sp.getBoolean("show_greg", true)
         set(v) = sp.edit().putBoolean("show_greg", v).apply()
     /** آیکون وضعیت آب‌وهوا (از اینترنت، برای شهر انتخابی). */
     var weather: Boolean
