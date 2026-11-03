@@ -5,17 +5,13 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.media.MediaPlayer
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import java.util.Calendar
 
 /**
- * صدای خروس (res/raw/rooster.mp3) چند دقیقه پیش از طلوع آفتاب (انتخابی، از تنظیمات).
- * مثل بیپ اذان با AlarmManager زمان‌بندی می‌شود تا وقتی اپ بسته است هم پخش شود.
- * صدا از کانال «زنگ هشدار» پخش می‌شود (بلندی آن = صدای زنگ هشدار گوشی).
+ * زنگ پیش از طلوع آفتاب (انتخابی، از تنظیمات): صدای خروس (res/raw/rooster.mp3) یا فایل صوتی
+ * انتخابی کاربر، با یا بدون لرزش. مثل بیپ اذان با AlarmManager زمان‌بندی می‌شود تا وقتی اپ بسته
+ * است هم پخش شود؛ خود پخش با [SoundService] است.
  */
 object Rooster {
     private const val ACTION = "com.denanex.aod.ROOSTER"
@@ -60,53 +56,18 @@ object Rooster {
         }
     }
 
-    /** پخش صدای خروس؛ [done] پس از پایان صدا (یا خطا). */
-    fun play(ctx: Context, done: (() -> Unit)? = null) {
-        val h = Handler(Looper.getMainLooper())
-        var finished = false
-        fun finish(mp: MediaPlayer?) {
-            if (finished) return
-            finished = true
-            try { mp?.release() } catch (_: Exception) {}
-            done?.invoke()
-        }
-        val mp = try {
-            MediaPlayer().apply {
-                setAudioAttributes(AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build())
-                ctx.resources.openRawResourceFd(R.raw.rooster).use {
-                    setDataSource(it.fileDescriptor, it.startOffset, it.length)
-                }
-                prepare()
-            }
-        } catch (_: Exception) { null }
-        if (mp == null) { finish(null); return }
-        mp.setOnCompletionListener { finish(it) }
-        mp.setOnErrorListener { p, _, _ -> finish(p); true }
-        mp.start()
-        // برای اطمینان، اگر «پایان پخش» نرسید، حداکثر پس از ۸ ثانیه رها کن (goAsync حدود ۱۰ ثانیه وقت دارد)
-        h.postDelayed({ finish(mp) }, 8_000L)
-    }
+    /** پخش آزمایشی (یا واقعی) صدای انتخاب‌شده. */
+    fun play(ctx: Context) = SoundService.start(ctx, SoundService.KIND_ROOSTER, "زنگ پیش از طلوع آفتاب")
 }
 
-/** رسیدن زمان صدای خروس. */
+/** رسیدن زمان زنگ پیش از طلوع. */
 class RoosterReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val app = context.applicationContext
-        val pending = goAsync()
         // اگر گوشی خواب بوده و هشدار خیلی دیر رسیده، بی‌موقع پخش نکن
         val now = System.currentTimeMillis()
         val onTime = Rooster.times(app, now - 3_600_000L).any { t -> now >= t - 60_000L && now <= t + 120_000L }
-        if (!Prefs(app).rooster || !onTime) {
-            Rooster.schedule(app)
-            pending.finish()
-            return
-        }
-        Rooster.play(app) {
-            Rooster.schedule(app)
-            pending.finish()
-        }
+        if (Prefs(app).rooster && onTime) Rooster.play(app)
+        Rooster.schedule(app)
     }
 }

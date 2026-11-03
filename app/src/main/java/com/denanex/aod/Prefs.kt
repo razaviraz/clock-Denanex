@@ -6,11 +6,12 @@ import android.view.Window
 
 /** همهٔ تنظیمات اپ (در SharedPreferences). */
 class Prefs(ctx: Context) {
-    private val sp = ctx.applicationContext.getSharedPreferences("aod", Context.MODE_PRIVATE)
+    private val app = ctx.applicationContext
+    private val sp = app.getSharedPreferences("aod", Context.MODE_PRIVATE)
 
     companion object {
-        /** شمارهٔ شهر برای «موقعیت من» (مختصات ذخیره‌شده از GPS/شبکه). */
-        const val CITY_MY_LOCATION = -1
+        /** شمارهٔ شهر برای «موقعیت من» در نسخه‌های قبل (فقط برای انتقال تنظیم قدیمی). */
+        private const val LEGACY_MY_LOCATION = -1
         const val CREDIT = "تهیه‌کننده: محمد رضوی‌نژاد — التماس دعا 🤲"
 
         val styleNames = arrayOf(
@@ -37,15 +38,40 @@ class Prefs(ctx: Context) {
         )
     }
 
-    var city: Int
-        get() = sp.getInt("city", 0)
-        set(v) = sp.edit().putInt("city", v).apply()
-    var myLat: Double
-        get() = sp.getFloat("my_lat", 35.6892f).toDouble()
-        set(v) = sp.edit().putFloat("my_lat", v.toFloat()).apply()
-    var myLon: Double
-        get() = sp.getFloat("my_lon", 51.3890f).toDouble()
-        set(v) = sp.edit().putFloat("my_lon", v.toFloat()).apply()
+    // ---------------- مکان (استان و شهر) ----------------
+
+    /** شهر انتخابی (استان، نام و مختصات) را ذخیره می‌کند. */
+    fun setCity(c: City) {
+        sp.edit().putString("loc_prov", c.province).putString("loc_city", c.name)
+            .putString("loc_lat", c.lat.toString()).putString("loc_lon", c.lon.toString()).apply()
+    }
+
+    /** شهر انتخابی؛ اگر از نسخهٔ قبل تنظیم قدیمی مانده، یک بار به استان و شهر تبدیل می‌شود. */
+    fun location(): City {
+        val name = sp.getString("loc_city", null)
+        if (name != null) {
+            val lat = sp.getString("loc_lat", null)?.toDoubleOrNull()
+            val lon = sp.getString("loc_lon", null)?.toDoubleOrNull()
+            if (lat != null && lon != null) return City(name, lat, lon, sp.getString("loc_prov", "") ?: "")
+        }
+        val c = migrateLegacy()
+        setCity(c)
+        return c
+    }
+
+    private fun migrateLegacy(): City {
+        if (!sp.contains("city")) return Cities.find(app, "تهران", "تهران") ?: Cities.TEHRAN
+        val idx = sp.getInt("city", 0)
+        val old = if (idx == LEGACY_MY_LOCATION)
+            City("", sp.getFloat("my_lat", 35.6892f).toDouble(), sp.getFloat("my_lon", 51.3890f).toDouble())
+        else Cities.legacy.getOrElse(idx) { Cities.legacy[0] }
+        val plain = old.name.replace("\u200c", " ").replace(" ", "")
+        if (plain.isNotEmpty()) {
+            Cities.all(app).firstOrNull { it.name.replace(" ", "") == plain && Cities.distKm(it.lat, it.lon, old.lat, old.lon) < 40 }
+                ?.let { return it }
+        }
+        return Cities.nearest(app, old.lat, old.lon)
+    }
 
     var style: Int
         get() = sp.getInt("style", 2).coerceIn(0, STYLE_COUNT - 1)
@@ -63,15 +89,48 @@ class Prefs(ctx: Context) {
     var persianDigits: Boolean
         get() = sp.getBoolean("fa_digits", true)
         set(v) = sp.edit().putBoolean("fa_digits", v).apply()
+    /** تاریخ خورشیدی (شمسی). */
     var showDate: Boolean
         get() = sp.getBoolean("show_date", true)
         set(v) = sp.edit().putBoolean("show_date", v).apply()
+    /** تاریخ قمری. */
+    var showHijri: Boolean
+        get() = sp.getBoolean("show_hijri", false)
+        set(v) = sp.edit().putBoolean("show_hijri", v).apply()
+    /** تاریخ میلادی. */
+    var showGregorian: Boolean
+        get() = sp.getBoolean("show_greg", false)
+        set(v) = sp.edit().putBoolean("show_greg", v).apply()
+    /** آیکون وضعیت آب‌وهوا (از اینترنت، برای شهر انتخابی). */
+    var weather: Boolean
+        get() = sp.getBoolean("weather", true)
+        set(v) = sp.edit().putBoolean("weather", v).apply()
+    /** قبله‌نما و قطب‌نما وسط ساعت عقربه‌ای (با حسگر گوشی). */
+    var qibla: Boolean
+        get() = sp.getBoolean("qibla", true)
+        set(v) = sp.edit().putBoolean("qibla", v).apply()
+    /** کمان کم‌رنگ مسیر خورشید بالای صفحه، با طلوع و غروب خورشید و ماه. */
+    var skyArc: Boolean
+        get() = sp.getBoolean("sky_arc", true)
+        set(v) = sp.edit().putBoolean("sky_arc", v).apply()
+    /** گوشی افقی: ساعت دیجیتال تمام‌صفحه و خیلی درشت (ساعت چپ، دقیقه راست). */
+    var landscapeBig: Boolean
+        get() = sp.getBoolean("land_big", true)
+        set(v) = sp.edit().putBoolean("land_big", v).apply()
+    /** سرخی غروب و فرو رفتن خورشید هنگام غروب. */
+    var sunsetFx: Boolean
+        get() = sp.getBoolean("sunset_fx", true)
+        set(v) = sp.edit().putBoolean("sunset_fx", v).apply()
     var showBattery: Boolean
         get() = sp.getBoolean("show_battery", true)
         set(v) = sp.edit().putBoolean("show_battery", v).apply()
     var showSunrise: Boolean
-        get() = sp.getBoolean("show_sunrise", true)
+        get() = sp.getBoolean("show_sunrise", false)
         set(v) = sp.edit().putBoolean("show_sunrise", v).apply()
+    /** نشانهٔ کوچک خورشید بالای صفحه، در جای واقعی‌اش در آسمان (هر وقت خورشید بالای افق است). */
+    var sunPos: Boolean
+        get() = sp.getBoolean("sun_pos", true)
+        set(v) = sp.edit().putBoolean("sun_pos", v).apply()
 
     /** چند دقیقه پیش از طلوع، سفیدی ملایم صبح شروع شود. */
     var dawnMinutes: Int
@@ -94,6 +153,36 @@ class Prefs(ctx: Context) {
     var roosterMinutes: Int
         get() = sp.getInt("rooster_min", 10).coerceIn(0, 60)
         set(v) = sp.edit().putInt("rooster_min", v).apply()
+    /** فایل صوتی انتخابی کاربر به‌جای صدای خروس (content://…)؛ خالی = صدای خروس. */
+    var roosterUri: String
+        get() = sp.getString("rooster_uri", "") ?: ""
+        set(v) = sp.edit().putString("rooster_uri", v).apply()
+    var roosterUriName: String
+        get() = sp.getString("rooster_uri_name", "") ?: ""
+        set(v) = sp.edit().putString("rooster_uri_name", v).apply()
+    /** هنگام پخش صدای پیش از طلوع، گوشی بلرزد. */
+    var roosterVibrate: Boolean
+        get() = sp.getBoolean("rooster_vib", false)
+        set(v) = sp.edit().putBoolean("rooster_vib", v).apply()
+
+    /** پخش اذان: ۰ خاموش، ۱ شیعه (۳ وقت)، ۲ اهل سنت (۵ وقت). */
+    var adhanMode: Int
+        get() = sp.getInt("adhan_mode", Prayers.MODE_OFF).coerceIn(0, 2)
+        set(v) = sp.edit().putInt("adhan_mode", v).apply()
+    /** عصر به مذهب حنفی (سایه دو برابر). */
+    var asrHanafi: Boolean
+        get() = sp.getBoolean("asr_hanafi", false)
+        set(v) = sp.edit().putBoolean("asr_hanafi", v).apply()
+    /** فایل اذان انتخابی کاربر (content://…)؛ خالی = اذان همراه برنامه. */
+    var adhanUri: String
+        get() = sp.getString("adhan_uri", "") ?: ""
+        set(v) = sp.edit().putString("adhan_uri", v).apply()
+    var adhanUriName: String
+        get() = sp.getString("adhan_uri_name", "") ?: ""
+        set(v) = sp.edit().putString("adhan_uri_name", v).apply()
+    var adhanVibrate: Boolean
+        get() = sp.getBoolean("adhan_vib", false)
+        set(v) = sp.edit().putBoolean("adhan_vib", v).apply()
 
     /** اگر صفحهٔ تنظیمات ۲ دقیقه لمس نشد، ساعت خودکار باز شود. */
     var autoClock: Boolean
@@ -125,10 +214,6 @@ class Prefs(ctx: Context) {
     var burnIn: Boolean
         get() = sp.getBoolean("burn_in", true)
         set(v) = sp.edit().putBoolean("burn_in", v).apply()
-
-    fun location(): City =
-        if (city == CITY_MY_LOCATION) City("موقعیت من", myLat, myLon)
-        else Cities.list.getOrElse(city) { Cities.list[0] }
 
     fun mainColor(): Int = colorValues[color]
 

@@ -7,20 +7,25 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.MotionEvent
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -29,6 +34,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import java.util.Calendar
+import java.util.Locale
 
 /** صفحهٔ تنظیمات (همهٔ اجزا با کد ساخته می‌شوند؛ بدون فایل طرح‌بندی). */
 class SettingsActivity : Activity() {
@@ -36,9 +42,21 @@ class SettingsActivity : Activity() {
     private lateinit var prefs: Prefs
     private lateinit var preview: ClockView
     private lateinit var sunInfo: TextView
-    private lateinit var citySpinner: Spinner
     private lateinit var hijriInfo: TextView
     private lateinit var roosterInfo: TextView
+    private lateinit var roosterSound: TextView
+    private lateinit var adhanInfo: TextView
+    private lateinit var adhanSound: TextView
+    private lateinit var provSpinner: Spinner
+    private lateinit var citySpinner: Spinner
+    private val styleCards = ArrayList<LinearLayout>()
+    private val stylePreviews = ArrayList<ClockView>()
+    private val colorDots = ArrayList<View>()
+
+    private var provinces: List<String> = emptyList()
+    private var cities: List<City> = emptyList()
+    /** هنگام پر کردن فهرست شهرها با کد، انتخاب خودکار اسپینر نادیده گرفته شود. */
+    private var fillingCities = false
 
     // اگر صفحه ۲ دقیقه لمس نشد، ساعت خودکار باز شود
     private val idleHandler = Handler(Looper.getMainLooper())
@@ -79,59 +97,120 @@ class SettingsActivity : Activity() {
         root.addView(bigButton("▶  نمایش ساعت") {
             startActivity(Intent(this, AodActivity::class.java))
         })
-        root.addView(bigButton("🌅  پیش‌نمایش سفیدی صبح و طلوع (حدود ۱ دقیقه)") {
+        root.addView(bigButton("🌅  پیش‌نمایش طلوع (حدود ۱ دقیقه)") {
             startActivity(Intent(this, AodActivity::class.java).putExtra(AodActivity.EXTRA_DEMO, true))
         })
-        root.addView(hint("در صفحهٔ ساعت: نگه داشتن = تنظیمات • دو ضربه = خروج • " +
-            "ضربه روی «راهنمای نماز شب» = باز شدن راهنما • شکل ساعت فقط از همین‌جا عوض می‌شود"))
+        root.addView(bigButton("🌇  پیش‌نمایش غروب (حدود ۱ دقیقه)") {
+            startActivity(Intent(this, AodActivity::class.java).putExtra(AodActivity.EXTRA_DEMO_SUNSET, true))
+        })
+        root.addView(hint("در صفحهٔ ساعت: نگه داشتن = تنظیمات • دو ضربه = خروج • شکل ساعت فقط از همین‌جا عوض می‌شود"))
 
-        section(root, "ظاهر ساعت")
-        root.addView(spinner("شکل ساعت", Prefs.styleNames, prefs.style) { prefs.style = it; refresh() })
-        root.addView(spinner("رنگ", Prefs.colorNames, prefs.color) { prefs.color = it; refresh() })
+        // ---------------- ظاهر ----------------
+        section(root, "شکل ساعت")
+        root.addView(styleGallery())
+        section(root, "رنگ")
+        root.addView(colorRow())
+        root.addView(hint("رنگ انتخابی: " + Prefs.colorNames[prefs.color]).also { colorName = it })
+
+        section(root, "نمایش")
         root.addView(switch("۲۴ ساعته", prefs.h24) { prefs.h24 = it; refresh() })
         root.addView(switch("نمایش ثانیه", prefs.seconds) { prefs.seconds = it; refresh() })
         root.addView(switch("رقم‌های فارسی", prefs.persianDigits) { prefs.persianDigits = it; refresh() })
-        root.addView(switch("تاریخ خورشیدی", prefs.showDate) { prefs.showDate = it; refresh() })
-        root.addView(switch("باتری", prefs.showBattery) { prefs.showBattery = it; refresh() })
-        root.addView(switch("اذان صبح و طلوع آفتاب (با زمان مانده)", prefs.showSunrise) { prefs.showSunrise = it; refresh() })
+        root.addView(switch("گوشی افقی: ساعت دیجیتال تمام‌صفحه (ساعت چپ، دقیقه راست)", prefs.landscapeBig) {
+            prefs.landscapeBig = it; refresh()
+        })
+        root.addView(hint("در حالت افقی، شکل «عقربه‌ای + دیجیتال درشت»: عقربه‌ای سمت راست و دیجیتال سمت چپ."))
+        root.addView(switch("درصد باتری", prefs.showBattery) { prefs.showBattery = it; refresh() })
+        root.addView(switch("آب‌وهوای شهر (آیکون و دما، از اینترنت)", prefs.weather) { prefs.weather = it; refresh() })
+        root.addView(switch("قبله‌نما و قطب‌نما وسط ساعت عقربه‌ای", prefs.qibla) { prefs.qibla = it; refresh() })
+        root.addView(hint("کعبه در جهت قبله و «ش» (مثلث قرمز) سمت شمال نشان داده می‌شود؛ با حسگر قطب‌نمای گوشی و موقعیت شهر. " +
+            "وقتی گوشی رو به قبله است، خط قبله سبز می‌شود. گوشی را صاف و دور از آهن‌ربا و فلز نگه دارید."))
+        root.addView(switch("اوقات شرعی زیر ساعت: اذان صبح و طلوع آفتاب (با زمان مانده)", prefs.showSunrise) {
+            prefs.showSunrise = it; refresh()
+        })
 
-        section(root, "سفیدی صبح و طلوع آفتاب")
-        root.addView(switch("نمایش سفیدی صبح و طلوع خورشید", prefs.sunrise) { prefs.sunrise = it; refresh() })
-        root.addView(hint("از چند دقیقه پیش از طلوع (پیش‌فرض ۱۰ دقیقه) سفیدی ملایم صبح در افق پیدا می‌شود؛ " +
-            "سر وقت طلوع، خورشید از پشت افق درمی‌آید و تا ۲۰ دقیقه پس از طلوع آرام بالا می‌رود."))
-        root.addView(switch("هلال ماه بالای ساعت", prefs.moon) { prefs.moon = it; refresh() })
-        val cityNames = Cities.list.map { it.name } + "📍 موقعیت من (GPS)"
-        val cityIndex = if (prefs.city == Prefs.CITY_MY_LOCATION) Cities.list.size else prefs.city
-        val cityRow = spinner("افق شرعی شهر", cityNames.toTypedArray(), cityIndex) {
-            if (it == Cities.list.size) useMyLocation() else { prefs.city = it; refresh(); FajrBeep.scheduleAll(this) }
-        }
-        citySpinner = cityRow.getChildAt(1) as Spinner
-        root.addView(cityRow)
+        // ---------------- تاریخ ----------------
+        section(root, "تاریخ")
+        root.addView(switch("خورشیدی (شمسی)", prefs.showDate) { prefs.showDate = it; refresh() })
+        root.addView(switch("قمری", prefs.showHijri) { prefs.showHijri = it; refresh() })
+        root.addView(switch("میلادی", prefs.showGregorian) { prefs.showGregorian = it; refresh() })
+        hijriInfo = hint("")
+        root.addView(hijriInfo)
+        root.addView(seek("تصحیح تاریخ قمری", 0, 4, prefs.hijriOffset + 2, "", { v -> Persian.digits(
+            when { v - 2 > 0 -> "+${v - 2} روز"; v - 2 < 0 -> "${v - 2} روز"; else -> "بدون تصحیح" }) }) {
+            prefs.hijriOffset = it - 2; refresh()
+        })
+
+        // ---------------- مکان ----------------
+        section(root, "📍 استان و شهر (افق شرعی، آب‌وهوا و قبله)")
+        root.addView(locationRows())
+        root.addView(bigButton("📍  تعیین شهر با GPS") { useMyLocation() })
         sunInfo = hint("")
         root.addView(sunInfo)
+
+        // ---------------- آسمان ----------------
+        section(root, "آسمان: طلوع، غروب، خورشید و ماه")
+        root.addView(switch("سفیدی و سرخی صبح و طلوع خورشید", prefs.sunrise) { prefs.sunrise = it; refresh() })
+        root.addView(hint("از چند دقیقه پیش از طلوع (پیش‌فرض ۱۰ دقیقه) اول سفیدی ملایم صبح و بعد سرخی در افق پیدا می‌شود؛ " +
+            "سر وقت طلوع، خورشید از پشت افق درمی‌آید و تا ۲۰ دقیقه پس از طلوع آرام بالا می‌رود."))
         root.addView(seek("شروع سفیدی صبح، چند دقیقه پیش از طلوع", 3, 40, prefs.dawnMinutes, "دقیقه") {
             prefs.dawnMinutes = it; refresh()
         })
+        root.addView(switch("سرخی غروب و فرو رفتن خورشید", prefs.sunsetFx) { prefs.sunsetFx = it; refresh() })
+        root.addView(switch("کمان کم‌رنگ مسیر خورشید بالای صفحه (با ساعت طلوع و غروب)", prefs.skyArc) {
+            prefs.skyArc = it; refresh()
+        })
+        root.addView(switch("جای خورشید در آسمان", prefs.sunPos) { prefs.sunPos = it; refresh() })
+        root.addView(switch("هلال ماه در آسمان", prefs.moon) { prefs.moon = it; refresh() })
+        root.addView(switch("آسمان نیمه‌شب (سرمه‌ای با ستاره) از ۲۰ دقیقه پیش از اذان صبح", prefs.nightSky) {
+            prefs.nightSky = it; refresh()
+        })
 
-        section(root, "🐓 صدای خروس پیش از طلوع آفتاب")
-        root.addView(switch("پخش صدای خروس (قوقولی‌قوقو)", prefs.rooster) {
-            prefs.rooster = it; Rooster.schedule(this); refresh()
+        // ---------------- اذان ----------------
+        section(root, "🕌 پخش اذان")
+        root.addView(spinner("اذان", arrayOf("خاموش", "شیعه — ۳ وقت (صبح، ظهر، مغرب)",
+            "اهل سنت — ۵ وقت (صبح، ظهر، عصر، مغرب، عشا)"), prefs.adhanMode) {
+            prefs.adhanMode = it; askNotifications(); Adhan.schedule(this); refresh()
+        })
+        root.addView(switch("اهل سنت: عصر به مذهب حنفی (سایه دو برابر)", prefs.asrHanafi) {
+            prefs.asrHanafi = it; Adhan.schedule(this); refresh()
+        })
+        adhanInfo = hint("")
+        root.addView(adhanInfo)
+        adhanSound = hint("")
+        root.addView(adhanSound)
+        root.addView(bigButton("🎵  انتخاب فایل اذان از گوشی") { pickAudio(REQ_ADHAN_FILE) })
+        root.addView(bigButton("↩  اذان همراه برنامه") { prefs.adhanUri = ""; prefs.adhanUriName = ""; refresh() })
+        root.addView(switch("لرزش گوشی هنگام اذان", prefs.adhanVibrate) { prefs.adhanVibrate = it })
+        root.addView(rowButtons("▶  آزمایش اذان" to {
+            SoundService.start(this, SoundService.KIND_ADHAN, "آزمایش اذان")
+        }, "■  قطع" to { SoundService.stop(this) }))
+
+        // ---------------- زنگ پیش از طلوع ----------------
+        section(root, "🐓 زنگ پیش از طلوع آفتاب")
+        root.addView(switch("پخش زنگ پیش از طلوع", prefs.rooster) {
+            prefs.rooster = it; if (it) askNotifications(); Rooster.schedule(this); refresh()
         })
         root.addView(seek("چند دقیقه پیش از طلوع آفتاب", 0, 60, prefs.roosterMinutes, "دقیقه",
             { v -> if (v == 0) "سر وقت طلوع" else Persian.digits("$v") + " دقیقه" }) {
             prefs.roosterMinutes = it; Rooster.schedule(this); refresh()
         })
+        roosterSound = hint("")
+        root.addView(roosterSound)
+        root.addView(bigButton("🎵  انتخاب فایل صوتی از گوشی") { pickAudio(REQ_ROOSTER_FILE) })
+        root.addView(bigButton("🐓  صدای خروس (قوقولی‌قوقو)") { prefs.roosterUri = ""; prefs.roosterUriName = ""; refresh() })
+        root.addView(switch("لرزش گوشی هنگام پخش", prefs.roosterVibrate) { prefs.roosterVibrate = it })
         roosterInfo = hint("")
         root.addView(roosterInfo)
-        root.addView(bigButton("🐓  آزمایش صدای خروس") { Rooster.play(this) })
+        root.addView(rowButtons("▶  آزمایش" to { Rooster.play(this) }, "■  قطع" to { SoundService.stop(this) }))
 
-        section(root, "🌙 نماز شب و سحر")
+        // ---------------- نماز شب و نماز آیات ----------------
+        section(root, "🌙 نماز شب و نماز آیات")
         root.addView(bigButton("🌙  راهنمای نماز شب") {
             startActivity(Intent(this, GuideActivity::class.java))
         })
-        root.addView(hint("راهنما از صفحهٔ ساعت هم باز می‌شود: روی خط طلایی «راهنمای نماز شب» پایین صفحه ضربه بزنید."))
-        root.addView(switch("آسمان نیمه‌شب (سرمه‌ای با ستاره) از ۲۰ دقیقه پیش از اذان صبح", prefs.nightSky) {
-            prefs.nightSky = it; refresh()
+        root.addView(bigButton("🌘  راهنمای نماز آیات") {
+            startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_AYAT))
         })
         root.addView(switch("بیپ هر ۵ دقیقه از ۲۰ دقیقه مانده به اذان صبح", prefs.fajrBeep) {
             prefs.fajrBeep = it; FajrBeep.schedule(this)
@@ -140,14 +219,7 @@ class SettingsActivity : Activity() {
             "حتی وقتی اپ بسته است هم بیپ می‌زند. بلندی صدا = صدای «زنگ هشدار» گوشی."))
         root.addView(bigButton("🔔  آزمایش بیپ") { FajrBeep.play(5) })
 
-        section(root, "تاریخ قمری و تعطیلات")
-        hijriInfo = hint("")
-        root.addView(hijriInfo)
-        root.addView(seek("تصحیح تاریخ قمری", 0, 4, prefs.hijriOffset + 2, "", { v -> Persian.digits(
-            when { v - 2 > 0 -> "+${v - 2} روز"; v - 2 < 0 -> "${v - 2} روز"; else -> "بدون تصحیح" }) }) {
-            prefs.hijriOffset = it - 2; refresh()
-        })
-
+        // ---------------- صفحه ----------------
         section(root, "صفحه")
         root.addView(seek("نور صفحه", 1, 100, prefs.brightness, "٪") { prefs.brightness = it })
         root.addView(switch("هنگام طلوع کم‌کم نور صفحه بیشتر شود", prefs.brightenAtDawn) { prefs.brightenAtDawn = it })
@@ -222,8 +294,15 @@ class SettingsActivity : Activity() {
         if (prefs.autoClock) idleHandler.postDelayed(idleRun, IDLE_MS)
     }
 
+    private fun hmOf(ms: Long): String {
+        val c = Calendar.getInstance().apply { timeInMillis = ms }
+        return Persian.digits(String.format(Locale.US, "%02d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE)))
+    }
+
     private fun refresh() {
         preview.reload()
+        for (p in stylePreviews) p.reload()
+        updateStyleSelection()
         val loc = prefs.location()
         val cal = Calendar.getInstance()
         cal.set(Calendar.HOUR_OF_DAY, 12); cal.set(Calendar.MINUTE, 0)
@@ -243,22 +322,188 @@ class SettingsActivity : Activity() {
         hijriInfo.text = "امروز به قمری: " + Persian.digits("${hj[2]} ") + Hijri.months[hj[1] - 1] +
             Persian.digits(" ${hj[0]}") + (if (hol != null) " — تعطیل: $hol" else "") +
             "\nاگر با تقویم رسمی یک روز فرق داشت، با نوار زیر درستش کنید (تعطیلات مذهبی از روی همین حساب می‌شود)."
+
+        // اذان
+        val adhans = Adhan.upcoming(this, now).filter { it.ms > now }.sortedBy { it.ms }
+        adhanInfo.text = if (prefs.adhanMode == Prayers.MODE_OFF) "خاموش است."
+        else "اذان بعدی: " + (adhans.firstOrNull()?.let { "${it.name} ساعت ${hmOf(it.ms)}" } ?: "—") +
+            "\nحتی وقتی اپ بسته است هم پخش می‌شود؛ برای قطع، در اعلان «قطع» را بزنید. بلندی صدا = صدای «زنگ هشدار» گوشی."
+        val bundled = resources.getIdentifier(if (prefs.adhanMode == Prayers.MODE_SUNNI) "adhan_sunni" else "adhan_shia",
+            "raw", packageName) != 0
+        adhanSound.text = "صدای اذان: " + when {
+            prefs.adhanUri.isNotEmpty() -> "فایل انتخابی «${prefs.adhanUriName}»"
+            bundled -> "اذان همراه برنامه"
+            else -> "زنگ هشدار گوشی (فایل اذان همراه برنامه هنوز اضافه نشده؛ می‌توانید از گوشی انتخاب کنید)"
+        }
+        roosterSound.text = "صدا: " + if (prefs.roosterUri.isNotEmpty()) "فایل انتخابی «${prefs.roosterUriName}»" else "صدای خروس"
+
         if (sr == null) { sunInfo.text = ""; roosterInfo.text = ""; return }
-        val s = Calendar.getInstance().apply { timeInMillis = sr }
-        val d = Calendar.getInstance().apply { timeInMillis = sr - prefs.dawnMinutes * 60_000L }
-        fun hm(c: Calendar) = Persian.digits(String.format(java.util.Locale.US, "%02d:%02d",
-            c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE)))
+        val d = sr - prefs.dawnMinutes * 60_000L
         val fj = SunCalc.fajr(cal.timeInMillis, loc.lat, loc.lon)
-        val fjs = if (fj == null) "" else "اذان صبح: ${hm(Calendar.getInstance().apply { timeInMillis = fj })} — "
-        sunInfo.text = "$day به افق ${loc.name}: ${fjs}طلوع آفتاب: ${hm(s)} — شروع سفیدی صبح: ${hm(d)}"
+        val ss = SunCalc.sunset(cal.timeInMillis, loc.lat, loc.lon)
+        sunInfo.text = "$day به افق ${loc.name} (${loc.province}): " +
+            (if (fj == null) "" else "اذان صبح ${hmOf(fj)} — ") + "طلوع آفتاب ${hmOf(sr)} — شروع سفیدی صبح ${hmOf(d)}" +
+            (if (ss == null) "" else " — غروب ${hmOf(ss)}")
         val nextR = Rooster.times(this, now).filter { it > now }.minOrNull()
         val rs = Calendar.getInstance().apply { timeInMillis = nextR ?: now }
         val rDay = if (rs.get(Calendar.DAY_OF_YEAR) == now2.get(Calendar.DAY_OF_YEAR)) "امروز" else "فردا"
-        roosterInfo.text = (if (prefs.rooster && nextR != null) "$rDay ساعت ${hm(rs)} پخش می‌شود. " else "خاموش است. ") +
+        roosterInfo.text = (if (prefs.rooster && nextR != null) "$rDay ساعت ${hmOf(nextR)} پخش می‌شود. " else "خاموش است. ") +
             "حتی وقتی اپ بسته است هم پخش می‌شود. بلندی صدا = صدای «زنگ هشدار» گوشی."
     }
 
-    // ---------------- موقعیت من ----------------
+    // ---------------- شکل و رنگ (نمونه‌های تصویری) ----------------
+
+    private var colorName: TextView? = null
+
+    private fun styleGallery(): View {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (i in 0 until Prefs.STYLE_COUNT) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(4), dp(4), dp(4), dp(6))
+                isClickable = true
+                setOnClickListener { prefs.style = i; refresh() }
+            }
+            val pv = ClockView(this, previewStyle = i)
+            card.addView(pv, LinearLayout.LayoutParams(dp(108), dp(132)))
+            card.addView(TextView(this).apply {
+                text = Prefs.styleNames[i]
+                textSize = 11f
+                setTextColor(Color.rgb(0xD0, 0xD0, 0xD8))
+                gravity = Gravity.CENTER
+                maxWidth = dp(112)
+            })
+            // لمس روی خود نمونه هم انتخاب کند
+            pv.setOnClickListener { prefs.style = i; refresh() }
+            stylePreviews.add(pv)
+            styleCards.add(card)
+            row.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { marginEnd = dp(8) })
+        }
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    private fun colorRow(): View {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(4), 0, dp(4)) }
+        for (i in Prefs.colorValues.indices) {
+            val dot = View(this).apply {
+                isClickable = true
+                contentDescription = Prefs.colorNames[i]
+                setOnClickListener {
+                    prefs.color = i
+                    colorName?.text = "رنگ انتخابی: " + Prefs.colorNames[i]
+                    refresh()
+                }
+            }
+            colorDots.add(dot)
+            row.addView(dot, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(10) })
+        }
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    private fun updateStyleSelection() {
+        for ((i, card) in styleCards.withIndex()) {
+            card.background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(Color.rgb(0x05, 0x05, 0x08))
+                setStroke(dp(if (i == prefs.style) 3 else 1),
+                    if (i == prefs.style) Color.rgb(0xFF, 0xA5, 0x48) else Color.rgb(0x30, 0x30, 0x38))
+            }
+        }
+        for ((i, dot) in colorDots.withIndex()) {
+            dot.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Prefs.colorValues[i])
+                setStroke(dp(if (i == prefs.color) 4 else 1),
+                    if (i == prefs.color) Color.rgb(0xFF, 0xA5, 0x48) else Color.rgb(0x50, 0x50, 0x58))
+            }
+        }
+    }
+
+    // ---------------- استان و شهر ----------------
+
+    private fun locationRows(): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        provinces = Cities.provinces(this)
+        val loc = prefs.location()
+
+        provSpinner = Spinner(this)
+        provSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, provinces)
+        val pIdx = provinces.indexOf(loc.province).coerceAtLeast(0)
+        provSpinner.setSelection(pIdx, false)
+        citySpinner = Spinner(this)
+        fillCities(provinces.getOrElse(pIdx) { "" }, loc.name)
+
+        provSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val p = provinces[position]
+                if (p == prefs.location().province) return
+                fillCities(p, null)
+                cities.firstOrNull()?.let { selectCity(it) }   // مرکز استان
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        citySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (fillingCities) return
+                val c = cities.getOrNull(position) ?: return
+                val cur = prefs.location()
+                if (c.name == cur.name && c.province == cur.province) return
+                selectCity(c)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        box.addView(labeled("استان", provSpinner))
+        box.addView(labeled("شهر", citySpinner))
+        return box
+    }
+
+    private fun fillCities(province: String, select: String?) {
+        fillingCities = true
+        cities = Cities.of(this, province)
+        citySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, cities.map { it.name })
+        val i = if (select == null) 0 else cities.indexOfFirst { it.name == select }.coerceAtLeast(0)
+        citySpinner.setSelection(i, false)
+        // انتخاب خودکار اسپینر بعد از این خط اجرا می‌شود؛ پس از آن دوباره گوش بده
+        citySpinner.post { fillingCities = false }
+    }
+
+    private fun selectCity(c: City) {
+        prefs.setCity(c)
+        FajrBeep.scheduleAll(this)
+        refresh()
+    }
+
+    /** استان و شهر را روی [c] می‌گذارد (پس از GPS). */
+    private fun showCity(c: City) {
+        val pIdx = provinces.indexOf(c.province)
+        if (pIdx >= 0) provSpinner.setSelection(pIdx, false)
+        fillCities(c.province, c.name)
+    }
+
+    private fun labeled(label: String, v: View): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(6), 0, dp(6))
+        }
+        row.addView(TextView(this).apply {
+            text = label
+            textSize = 15f
+            setTextColor(Color.WHITE)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.6f))
+        row.addView(v, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.6f))
+        return row
+    }
+
+    // ---------------- GPS ----------------
 
     private fun useMyLocation() {
         if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -271,7 +516,8 @@ class SettingsActivity : Activity() {
             val l = try { lm.getLastKnownLocation(p) } catch (_: Exception) { null }
             if (l != null && (best == null || l.time > best.time)) best = l
         }
-        if (best != null) {
+        // موقعیت قدیمی (بیش از ۲ ساعت) را قبول نکن؛ تازه بگیر
+        if (best != null && System.currentTimeMillis() - best.time < 2 * 3_600_000L) {
             saveLocation(best)
             return
         }
@@ -290,16 +536,21 @@ class SettingsActivity : Activity() {
                 override fun onProviderDisabled(provider: String) {}
             }, mainLooper)
         } catch (_: Exception) {
-            Toast.makeText(this, "موقعیت در دسترس نیست؛ موقعیت‌یاب گوشی را روشن کنید", Toast.LENGTH_LONG).show()
+            if (best != null) saveLocation(best)
+            else Toast.makeText(this, "موقعیت در دسترس نیست؛ موقعیت‌یاب گوشی را روشن کنید", Toast.LENGTH_LONG).show()
         }
     }
 
+    /** نزدیک‌ترین شهر کشور به موقعیت گوشی را انتخاب می‌کند. */
     private fun saveLocation(l: Location) {
-        prefs.myLat = l.latitude
-        prefs.myLon = l.longitude
-        prefs.city = Prefs.CITY_MY_LOCATION
+        val c = Cities.nearest(this, l.latitude, l.longitude)
+        val km = Cities.distKm(l.latitude, l.longitude, c.lat, c.lon)
+        prefs.setCity(c)
+        showCity(c)
         FajrBeep.scheduleAll(this)
-        Toast.makeText(this, "موقعیت ذخیره شد", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "شهر: ${c.name} (استان ${c.province})" +
+            (if (km > 60) "\nنزدیک‌ترین شهر در فهرست؛ " + Persian.digits(km.toInt().toString()) + " کیلومتر فاصله" else ""),
+            Toast.LENGTH_LONG).show()
         refresh()
     }
 
@@ -307,9 +558,50 @@ class SettingsActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != REQ_LOC) return
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) useMyLocation()
-        else {
-            Toast.makeText(this, "بدون اجازهٔ موقعیت، یک شهر را از فهرست انتخاب کنید", Toast.LENGTH_LONG).show()
-            citySpinner.setSelection(if (prefs.city == Prefs.CITY_MY_LOCATION) Cities.list.size else prefs.city)
+        else Toast.makeText(this, "بدون اجازهٔ موقعیت، استان و شهر را از فهرست انتخاب کنید", Toast.LENGTH_LONG).show()
+    }
+
+    // ---------------- فایل صوتی و اعلان ----------------
+
+    private fun pickAudio(req: Int) {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "audio/*"
+        }
+        try {
+            startActivityForResult(i, req)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "برنامهٔ انتخاب فایل پیدا نشد", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Exception) {}
+        val name = displayName(uri)
+        when (requestCode) {
+            REQ_ROOSTER_FILE -> { prefs.roosterUri = uri.toString(); prefs.roosterUriName = name }
+            REQ_ADHAN_FILE -> { prefs.adhanUri = uri.toString(); prefs.adhanUriName = name }
+        }
+        refresh()
+    }
+
+    private fun displayName(uri: Uri): String = try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        } ?: "فایل صوتی"
+    } catch (_: Exception) { "فایل صوتی" }
+
+    /** اندروید ۱۳ به بعد: اجازهٔ اعلان (برای دکمهٔ «قطع» هنگام پخش اذان و زنگ). */
+    private fun askNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
         }
     }
 
@@ -342,6 +634,19 @@ class SettingsActivity : Activity() {
             .apply { topMargin = dp(6) }
     }
 
+    private fun rowButtons(vararg items: Pair<String, () -> Unit>): LinearLayout {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((label, action) in items) {
+            row.addView(Button(this).apply {
+                text = label
+                textSize = 16f
+                isAllCaps = false
+                setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { topMargin = dp(6) })
+        }
+        return row
+    }
+
     private fun switch(label: String, value: Boolean, onChange: (Boolean) -> Unit) = Switch(this).apply {
         text = label
         textSize = 15f
@@ -352,16 +657,6 @@ class SettingsActivity : Activity() {
     }
 
     private fun spinner(label: String, items: Array<String>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(6), 0, dp(6))
-        }
-        row.addView(TextView(this).apply {
-            text = label
-            textSize = 15f
-            setTextColor(Color.WHITE)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val sp = Spinner(this)
         sp.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
         sp.setSelection(selected.coerceIn(0, items.size - 1), false)
@@ -374,8 +669,7 @@ class SettingsActivity : Activity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        row.addView(sp, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f))
-        return row
+        return labeled(label, sp)
     }
 
     private fun seek(label: String, minV: Int, maxV: Int, value: Int, unit: String,
@@ -409,6 +703,9 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val REQ_LOC = 7
+        private const val REQ_NOTIF = 8
+        private const val REQ_ROOSTER_FILE = 21
+        private const val REQ_ADHAN_FILE = 22
         private const val IDLE_MS = 2 * 60_000L
     }
 }
