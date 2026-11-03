@@ -408,17 +408,28 @@ class SettingsActivity : Activity() {
 
     private fun styleGallery(): View {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (i in 0 until Prefs.STYLE_COUNT) {
+        // اول ساعت عقربه‌ای پیش‌فرض، بعد بقیه
+        val order = listOf(ClockView.STYLE_ANALOG_DIGITAL) + (0 until Prefs.STYLE_COUNT).filter { it != ClockView.STYLE_ANALOG_DIGITAL }
+        for (i in order) {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(dp(4), dp(4), dp(4), dp(6))
                 isClickable = true
+                tag = i       // شمارهٔ شکل (ترتیب نمایش با شماره فرق دارد)
                 setOnClickListener { prefs.style = i; refresh() }
             }
             val pv = ClockView(this, previewStyle = i)
             pv.contentDescription = Prefs.styleNames[i]
             card.addView(pv, LinearLayout.LayoutParams(dp(104), dp(128)))
+            card.addView(TextView(this).apply {
+                text = Prefs.styleNames[i]
+                textSize = 10f
+                setTextColor(Color.rgb(0xD0, 0xD0, 0xD8))
+                gravity = Gravity.CENTER
+                maxLines = 2
+                setPadding(0, dp(3), 0, 0)
+            }, LinearLayout.LayoutParams(dp(104), ViewGroup.LayoutParams.WRAP_CONTENT))
             // لمس روی خود نمونه هم انتخاب کند
             pv.setOnClickListener { prefs.style = i; refresh() }
             stylePreviews.add(pv)
@@ -454,7 +465,8 @@ class SettingsActivity : Activity() {
     }
 
     private fun updateStyleSelection() {
-        for ((i, card) in styleCards.withIndex()) {
+        for (card in styleCards) {
+            val i = card.tag as Int
             card.background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
                 setColor(Color.rgb(0x05, 0x05, 0x08))
@@ -480,7 +492,7 @@ class SettingsActivity : Activity() {
         val loc = prefs.location()
 
         provSpinner = Spinner(this)
-        provSpinner.adapter = greenAdapter(provinces)
+        provSpinner.adapter = darkAdapter(provSpinner, provinces, green = true)
         val pIdx = provinces.indexOf(loc.province).coerceAtLeast(0)
         provSpinner.setSelection(pIdx, false)
         citySpinner = Spinner(this)
@@ -520,7 +532,7 @@ class SettingsActivity : Activity() {
     private fun fillCities(province: String, select: String?) {
         fillingCities = true
         cities = Cities.of(this, province)
-        citySpinner.adapter = greenAdapter(cities.map { it.name })
+        citySpinner.adapter = darkAdapter(citySpinner, cities.map { it.name }, green = true)
         val i = if (select == null) 0 else cities.indexOfFirst { it.name == select }.coerceAtLeast(0)
         citySpinner.setSelection(i, false)
         // انتخاب خودکار اسپینر بعد از این خط اجرا می‌شود؛ پس از آن دوباره گوش بده
@@ -542,15 +554,42 @@ class SettingsActivity : Activity() {
         fillCities(c.province, c.name)
     }
 
-    /** فهرست کشویی که گزینهٔ انتخاب‌شده (روی خود اسپینر) را سبز فسفری ملایم نشان می‌دهد. */
-    private fun greenAdapter(items: List<String>) =
-        object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, items) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val v = super.getView(position, convertView, parent)
-                (v as? TextView)?.setTextColor(SELECTED_GREEN)
-                return v
-            }
+    /**
+     * فهرست کشویی با رنگ‌های صریح (مستقل از پوستهٔ گوشی، تا نوشته سیاه و ناخوانا نشود):
+     * گزینهٔ انتخاب‌شده روی خود اسپینر با زمینهٔ تیره و نوشتهٔ سبز (اگر [green]) یا سفید؛
+     * فهرست باز‌شده با زمینهٔ تیره و نوشتهٔ سفید، و گزینهٔ انتخاب‌شده سبز.
+     */
+    private fun darkAdapter(sp: Spinner, items: List<String>, green: Boolean): ArrayAdapter<String> {
+        sp.setPopupBackgroundDrawable(GradientDrawable().apply {
+            setColor(Color.rgb(0x22, 0x22, 0x2A)); cornerRadius = dp(8).toFloat()
+        })
+        sp.background = GradientDrawable().apply {
+            setColor(Color.rgb(0x1A, 0x22, 0x1C)); cornerRadius = dp(8).toFloat()
+            setStroke(dp(1), if (green) Color.rgb(0x3E, 0x6E, 0x44) else Color.rgb(0x44, 0x44, 0x50))
         }
+        return object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, items) {
+            private fun row(position: Int, closed: Boolean): TextView = TextView(this@SettingsActivity).apply {
+                text = getItem(position)
+                textSize = 16f
+                maxLines = 2
+                textDirection = View.TEXT_DIRECTION_RTL
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                val selected = position == sp.selectedItemPosition
+                setTextColor(when {
+                    closed && green -> SELECTED_GREEN
+                    closed -> Color.WHITE
+                    selected -> SELECTED_GREEN
+                    else -> Color.rgb(0xEE, 0xEE, 0xF2)
+                })
+                if (closed && green) setTypeface(typeface, Typeface.BOLD)
+                setBackgroundColor(if (closed) Color.TRANSPARENT
+                    else if (selected) Color.rgb(0x26, 0x3A, 0x2A) else Color.rgb(0x22, 0x22, 0x2A))
+            }
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View = row(position, true)
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View = row(position, false)
+        }
+    }
 
     private fun labeled(label: String, v: View): LinearLayout {
         val row = LinearLayout(this).apply {
@@ -761,8 +800,7 @@ class SettingsActivity : Activity() {
     private fun spinner(label: String, items: Array<String>, selected: Int, green: Boolean = false,
                         onPick: (Int) -> Unit): LinearLayout {
         val sp = Spinner(this)
-        sp.adapter = if (green) greenAdapter(items.toList())
-                     else ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
+        sp.adapter = darkAdapter(sp, items.toList(), green)
         sp.setSelection(selected.coerceIn(0, items.size - 1), false)
         sp.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             private var cur = selected
