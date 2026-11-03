@@ -68,6 +68,7 @@ android {
 // انتشار: gradlew publishApk (یا publish.bat)
 // APK را می‌سازد، aod.json (شمارهٔ نسخه برای به‌روزرسانی خودکار) را کنارش می‌نویسد و هر دو را با scp
 // به مقصد «target» در publish.properties می‌فرستد. اول APK و بعد aod.json.
+// پیام‌ها انگلیسی‌اند، چون پنجرهٔ cmd ویندوز فارسی را درهم نشان می‌دهد.
 // ---------------------------------------------------------------------------------------------------------
 val publishVariant = if (hasKeystore) "release" else "debug"
 tasks.register<Exec>("publishApk") {
@@ -76,17 +77,17 @@ tasks.register<Exec>("publishApk") {
     dependsOn("assemble" + publishVariant.replaceFirstChar { it.uppercase() })
     doFirst {
         val pf = rootProject.file("publish.properties")
-        if (!pf.exists()) throw GradleException("publish.properties نیست؛ از روی publish.properties.example بسازید.")
+        if (!pf.exists()) throw GradleException("publish.properties is missing: copy publish.properties.example to publish.properties and set target.")
         val target = Properties().apply { load(FileInputStream(pf)) }.getProperty("target")?.trim()
-        if (target.isNullOrEmpty()) throw GradleException("در publish.properties مقدار target خالی است.")
+        if (target.isNullOrEmpty()) throw GradleException("publish.properties: target is empty.")
         val apk = File(layout.buildDirectory.get().asFile, "outputs/apk/$publishVariant/app-$publishVariant.apk")
-        if (!apk.exists()) throw GradleException("فایل APK ساخته نشد: $apk")
+        if (!apk.exists()) throw GradleException("APK was not built: $apk")
         val up = File(apk.parentFile, "aod.apk")
         apk.copyTo(up, overwrite = true)
         val json = File(apk.parentFile, "aod.json")
         json.writeText("{\n  \"version_code\": $autoVersionCode,\n  \"version_name\": \"$autoVersionName\",\n  \"apk\": \"aod.apk\"\n}\n")
         commandLine("scp", up.absolutePath, json.absolutePath, target)
-        println("در حال فرستادن نسخهٔ $autoVersionName ($publishVariant) ...")
+        println("Uploading version $autoVersionName ($publishVariant) ...")
     }
-    doLast { println("انجام شد. گوشی‌ها با باز کردن اپ نسخهٔ جدید را می‌گیرند.") }
+    doLast { println("Done. Phones get the new version with \"check for update\" in the app.") }
 }
