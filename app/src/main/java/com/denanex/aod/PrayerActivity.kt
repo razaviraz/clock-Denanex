@@ -50,6 +50,7 @@ class PrayerActivity : Activity() {
     private lateinit var compass: Compass
     private lateinit var adhkarText: TextView
     private lateinit var btnAdhan: Button
+    private lateinit var timesText: TextView
 
     /** کدام‌یک از سه سلام باز (متن کامل) است؛ پیش‌فرض همه بسته. */
     private val salamExpanded = BooleanArray(3)
@@ -103,7 +104,8 @@ class PrayerActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(18), 0, dp(6))
         })
-        root.addView(TextView(this).apply {
+        timesText = TextView(this)
+        root.addView(timesText.apply {
             text = prayerTimesText(loc.lat, loc.lon, prefs.adhanMode, prefs.asrHanafi)
             textSize = 16f
             setTextColor(Color.rgb(0xEE, 0xEE, 0xF2))
@@ -124,6 +126,39 @@ class PrayerActivity : Activity() {
                 updateAdhanButton()
             }
         }
+        // پخش اذان: خاموش / شیعه / اهل سنت (همان تنظیم صفحهٔ تنظیمات؛ همین‌جا ذخیره می‌شود)
+        root.addView(TextView(this).apply {
+            text = "🕌 پخش اذان در وقت نماز:"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.rgb(0xFF, 0xE2, 0xA0))
+            setPadding(0, dp(16), 0, dp(4))
+        })
+        val modes = arrayOf("خاموش", "شیعه (۳ وقت)", "اهل سنت (۵ وقت)")
+        val group = android.widget.RadioGroup(this).apply {
+            orientation = android.widget.RadioGroup.HORIZONTAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = card(Color.rgb(0x1A, 0x22, 0x1C))
+        }
+        for ((i, m) in modes.withIndex()) {
+            group.addView(android.widget.RadioButton(this).apply {
+                id = 100 + i
+                text = m
+                textSize = 14f
+                setTextColor(Color.WHITE)
+            }, android.widget.RadioGroup.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        group.check(100 + prefs.adhanMode)
+        group.setOnCheckedChangeListener { _, checkedId ->
+            val p = Prefs(this)
+            p.adhanMode = (checkedId - 100).coerceIn(0, 2)
+            Adhan.schedule(this)
+            val l = p.location()
+            timesText.text = prayerTimesText(l.lat, l.lon, p.adhanMode, p.asrHanafi)
+            android.widget.Toast.makeText(this, "ذخیره شد: پخش اذان " + modes[p.adhanMode], android.widget.Toast.LENGTH_SHORT).show()
+        }
+        root.addView(group, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
         root.addView(btnAdhan, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             .apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(10) })
         updateAdhanButton()

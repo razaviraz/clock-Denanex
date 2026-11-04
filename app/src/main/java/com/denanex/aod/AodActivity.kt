@@ -52,6 +52,10 @@ class AodActivity : Activity() {
                     null -> {}
                     "weather" -> Weather.showDialog(this@AodActivity)   // وضعیت الان و پیش‌بینی ۷ روزه
                     "prayer" -> startActivity(Intent(this@AodActivity, PrayerActivity::class.java))   // قبله‌نما و سه سلام
+                    "menu" -> {   // دکمهٔ سه خط: تنظیمات
+                        startActivity(Intent(this@AodActivity, SettingsActivity::class.java))
+                        finish()
+                    }
                     else -> startActivity(Intent(this@AodActivity, GuideActivity::class.java)
                         .putExtra(GuideActivity.EXTRA_KIND, hit))
                 }

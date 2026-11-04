@@ -116,6 +116,8 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
     val compassRect = RectF()
     /** آیکون کعبه هم‌ردیف باتری: با ضربه، صفحهٔ قبله‌نما باز می‌شود. */
     val kaabaRect = RectF()
+    /** دکمهٔ منو (سه خط) وسط پایین صفحه: با ضربه، تنظیمات باز می‌شود. */
+    val menuRect = RectF()
     /** دکمه‌های نوار پایین (راهنماها): جای هر کدام و نوع راهنما. */
     val guideRects = ArrayList<Pair<RectF, String>>()
 
@@ -125,6 +127,7 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
         if (prefs.style >= 3 && compassRect.contains(x, y)) return "prayer"
         if (prefs.kaabaIcon && kaabaRect.contains(x, y)) return "prayer"
         for ((r, kind) in guideRects) if (r.contains(x, y)) return kind
+        if (menuRect.contains(x, y)) return "menu"
         return null
     }
 
@@ -953,12 +956,20 @@ class ClockView(ctx: Context, private val previewStyle: Int = -1) : View(ctx) {
             }
             smallPaint.isUnderlineText = false
         }
+        // دکمهٔ منو (سه خط) وسط پایین: باز کردن تنظیمات
+        val my = horizonY + gap * (if (items.isEmpty()) 0.45f else 0.70f)
+        val mw = base * 0.75f
+        strokePaint.color = Color.WHITE
+        strokePaint.alpha = 170
+        strokePaint.strokeWidth = max(2f, base * 0.14f)
+        for (k in -1..1) c.drawLine(cx - mw, my + k * base * 0.36f, cx + mw, my + k * base * 0.36f, strokePaint)
+        menuRect.set(cx - base * 2.2f, my - base * 1.4f, cx + base * 2.2f, my + base * 1.4f)
         if (versionText.isEmpty()) return
         smallPaint.typeface = tfLight
         smallPaint.textSize = base * 0.62f
         smallPaint.color = Color.WHITE
         smallPaint.alpha = 95
-        c.drawText(versionText, cx, horizonY + gap * (if (items.isEmpty()) 0.70f else 0.80f), smallPaint)
+        c.drawText(versionText, cx, horizonY + gap * (if (items.isEmpty()) 0.82f else 0.94f), smallPaint)
     }
 
     private fun hm(ms: Long): String {

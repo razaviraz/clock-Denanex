@@ -48,6 +48,11 @@ android {
             isMinifyEnabled = false
             if (hasKeystore) signingConfig = signingConfigs.getByName("release")
         }
+        // نسخهٔ Run در Android Studio هم با همان کلید release امضا شود؛ وگرنه نصب آن روی نسخهٔ
+        // publish.bat (یا برعکس) حذف برنامه را لازم می‌کند و همهٔ تنظیمات و آلبوم کاربر پاک می‌شود.
+        debug {
+            if (hasKeystore) signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     compileOptions {
