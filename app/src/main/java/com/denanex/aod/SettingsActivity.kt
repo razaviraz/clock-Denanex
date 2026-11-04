@@ -45,7 +45,7 @@ class SettingsActivity : Activity() {
     private lateinit var roosterInfo: TextView
     private lateinit var roosterSound: TextView
     private lateinit var albumInfo: TextView
-    private lateinit var albumMusicInfo: TextView
+    private lateinit var albumMusicButton: Button
     private lateinit var gpsSwitch: Switch
     private lateinit var albumSwitch: Switch
     private lateinit var albumMusicSwitch: Switch
@@ -149,10 +149,11 @@ class SettingsActivity : Activity() {
         })
 
         // ---------------- تاریخ ----------------
-        section(root, "تاریخ (همه در یک سطر)")
-        root.addView(switch("شمسی", prefs.showDate) { prefs.showDate = it; refresh() })
-        root.addView(switch("قمری", prefs.showHijri) { prefs.showHijri = it; refresh() })
-        root.addView(switch("میلادی", prefs.showGregorian) { prefs.showGregorian = it; refresh() })
+        section(root, "تاریخ")
+        root.addView(checkRow(
+            Triple("شمسی", prefs.showDate) { v: Boolean -> prefs.showDate = v; refresh() },
+            Triple("قمری", prefs.showHijri) { v: Boolean -> prefs.showHijri = v; refresh() },
+            Triple("میلادی", prefs.showGregorian) { v: Boolean -> prefs.showGregorian = v; refresh() }))
         // ---------------- اذان ----------------
         section(root, "🕌 پخش اذان")
         root.addView(spinner("اذان", arrayOf("خاموش", "شیعه — ۳ وقت (صبح، ظهر، مغرب)",
@@ -189,19 +190,16 @@ class SettingsActivity : Activity() {
 
         // ---------------- نماز شب، نماز آیات و نماز والدین ----------------
         section(root, "🌙 نماز شب، نماز آیات و نماز والدین")
-        root.addView(bigButton("🌙  راهنمای نماز شب") {
-            startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_NIGHT))
-        })
-        root.addView(bigButton("🌘  راهنمای نماز آیات") {
-            startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_AYAT))
-        })
-        root.addView(bigButton("🤲  راهنمای نماز والدین") {
-            startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_PARENTS))
-        })
-        root.addView(hint("نمایش در نوار پایین صفحهٔ ساعت (با یک ضربه باز می‌شود):"))
-        root.addView(switch("نماز شب", prefs.barNight) { prefs.barNight = it; refresh() })
-        root.addView(switch("نماز آیات", prefs.barAyat) { prefs.barAyat = it; refresh() })
-        root.addView(switch("نماز والدین", prefs.barParents) { prefs.barParents = it; refresh() })
+        root.addView(hint("راهنما:"))
+        root.addView(rowButtons(
+            "🌙 نماز شب" to { startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_NIGHT)) },
+            "🌘 نماز آیات" to { startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_AYAT)) },
+            "🤲 نماز والدین" to { startActivity(Intent(this, GuideActivity::class.java).putExtra(GuideActivity.EXTRA_KIND, GuideActivity.KIND_PARENTS)) }))
+        root.addView(hint("نمایش در نوار پایین صفحهٔ ساعت:"))
+        root.addView(checkRow(
+            Triple("نماز شب", prefs.barNight) { v: Boolean -> prefs.barNight = v; refresh() },
+            Triple("نماز آیات", prefs.barAyat) { v: Boolean -> prefs.barAyat = v; refresh() },
+            Triple("نماز والدین", prefs.barParents) { v: Boolean -> prefs.barParents = v; refresh() }))
         root.addView(switch("بیپ هر ۵ دقیقه از ۲۰ دقیقه مانده به اذان صبح", prefs.fajrBeep) {
             prefs.fajrBeep = it; FajrBeep.schedule(this)
         })
@@ -223,13 +221,29 @@ class SettingsActivity : Activity() {
                 .setPositiveButton("پاک شود") { _, _ -> AlbumStore.clear(this); refresh() }
                 .setNegativeButton("نه", null).show()
         })
-        root.addView(spinner("شکل قاب", Prefs.ALBUM_SHAPES, prefs.albumShape) { prefs.albumShape = it; refresh() })
-        root.addView(spinner("نوع قاب", Prefs.ALBUM_FRAMES, prefs.albumFrame) { prefs.albumFrame = it; refresh() })
-        albumMusicSwitch = switch("موزیک پس‌زمینه هنگام نمایش آلبوم", prefs.albumMusic) { prefs.albumMusic = it; refresh() }
-        root.addView(albumMusicSwitch)
-        albumMusicInfo = hint("")
-        root.addView(albumMusicInfo)
-        root.addView(bigButton("🎵  انتخاب موزیک از گوشی") { pickAudio(REQ_ALBUM_MUSIC) })
+        // شکل و نوع قاب در یک سطر
+        val frameRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        frameRow.addView(spinnerOnly(Prefs.ALBUM_SHAPES, prefs.albumShape) { prefs.albumShape = it; refresh() },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+        frameRow.addView(spinnerOnly(Prefs.ALBUM_FRAMES, prefs.albumFrame) { prefs.albumFrame = it; refresh() },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(hint("قاب عکس (شکل و نوع):"))
+        root.addView(frameRow)
+        // موزیک پس‌زمینه و انتخاب موزیک در یک سطر
+        val musicRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(6), 0, 0)
+        }
+        albumMusicSwitch = switch("موزیک", prefs.albumMusic) { prefs.albumMusic = it; refresh() }
+        musicRow.addView(albumMusicSwitch, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f))
+        albumMusicButton = Button(this).apply {
+            textSize = 14f
+            isAllCaps = false
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setOnClickListener { pickAudio(REQ_ALBUM_MUSIC) }
+        }
+        musicRow.addView(albumMusicButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f))
+        root.addView(musicRow)
 
         // ---------------- صفحه ----------------
         section(root, "صفحه")
@@ -253,6 +267,13 @@ class SettingsActivity : Activity() {
                 startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS))
             }
         })
+
+        section(root, "💾 پشتیبان تنظیمات")
+        root.addView(hint("با به‌روزرسانی عادی، تنظیمات و آلبوم سر جایشان می‌مانند. فقط اگر برنامه حذف و دوباره نصب شود پاک می‌شوند؛ " +
+            "برای آن وقت، تنظیمات را در یک فایل (مثلاً در پوشهٔ Download) ذخیره کنید و بعد از نصب، از همان فایل بازیابی کنید."))
+        root.addView(rowButtons(
+            "💾 ذخیره در فایل" to { createDoc(REQ_BACKUP_SAVE, "ClockDenanex-settings.json") },
+            "📂 بازیابی از فایل" to { openDoc(REQ_BACKUP_LOAD) }))
 
         section(root, "📤 اشتراک‌گذاری برنامه")
         root.addView(bigButton("📤  فرستادن خود برنامه (فایل APK)") { Share.apk(this) })
@@ -339,7 +360,7 @@ class SettingsActivity : Activity() {
         }
         val now2 = Calendar.getInstance()
         albumInfo.text = "تعداد عکس‌های آلبوم: " + Persian.digits(AlbumStore.count(this).toString())
-        albumMusicInfo.text = "موزیک: " + (if (prefs.albumMusicUri.isNotEmpty()) "«${prefs.albumMusicName}»" else "انتخاب نشده")
+        albumMusicButton.text = "🎵 " + (if (prefs.albumMusicUri.isNotEmpty()) prefs.albumMusicName else "انتخاب موزیک")
         roosterSound.text = "صدا: " + if (prefs.roosterUri.isNotEmpty()) "فایل انتخابی «${prefs.roosterUriName}»" else "صدای خروس"
 
         if (sr == null) { sunInfo.text = ""; roosterInfo.text = ""; return }
@@ -674,6 +695,22 @@ class SettingsActivity : Activity() {
             return
         }
         val uri = data?.data ?: return
+        if (requestCode == REQ_BACKUP_SAVE) {
+            Toast.makeText(this, if (Backup.export(this, uri)) "تنظیمات در فایل ذخیره شد ✓" else "ذخیرهٔ فایل ناموفق بود",
+                Toast.LENGTH_LONG).show()
+            return
+        }
+        if (requestCode == REQ_BACKUP_LOAD) {
+            val n = Backup.import(this, uri)
+            if (n < 0) {
+                Toast.makeText(this, "این فایل پشتیبان تنظیمات این برنامه نیست", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "تنظیمات بازیابی شد ✓", Toast.LENGTH_LONG).show()
+                FajrBeep.scheduleAll(this)
+                recreate()
+            }
+            return
+        }
         try {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Exception) {}
@@ -739,12 +776,62 @@ class SettingsActivity : Activity() {
             .apply { topMargin = dp(6) }
     }
 
+    /** چند تیک (CheckBox) در یک سطر. */
+    private fun checkRow(vararg items: Triple<String, Boolean, (Boolean) -> Unit>): LinearLayout {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(4), 0, dp(4)) }
+        for ((label, value, onChange) in items) {
+            row.addView(android.widget.CheckBox(this).apply {
+                text = label
+                textSize = 15f
+                setTextColor(Color.WHITE)
+                isChecked = value
+                setOnCheckedChangeListener { _, b -> onChange(b) }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        return row
+    }
+
+    /** فقط فهرست کشویی (بدون برچسب) با رنگ‌های تیره. */
+    private fun spinnerOnly(items: Array<String>, selected: Int, onPick: (Int) -> Unit): Spinner {
+        val sp = Spinner(this)
+        sp.adapter = darkAdapter(sp, items.toList(), false)
+        sp.setSelection(selected.coerceIn(0, items.size - 1), false)
+        sp.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            private var cur = selected
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position == cur) return
+                cur = position
+                onPick(position)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        return sp
+    }
+
+    private fun createDoc(req: Int, name: String) {
+        val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type = "application/json"; putExtra(Intent.EXTRA_TITLE, name)
+        }
+        try { startActivityForResult(i, req) } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "برنامهٔ مدیریت فایل پیدا نشد", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openDoc(req: Int) {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"
+        }
+        try { startActivityForResult(i, req) } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "برنامهٔ مدیریت فایل پیدا نشد", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun rowButtons(vararg items: Pair<String, () -> Unit>): LinearLayout {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for ((label, action) in items) {
             row.addView(Button(this).apply {
                 text = label
-                textSize = 16f
+                textSize = if (items.size > 2) 13f else 16f
                 isAllCaps = false
                 setOnClickListener { action() }
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { topMargin = dp(6) })
@@ -814,6 +901,8 @@ class SettingsActivity : Activity() {
         private const val REQ_ADHAN_FILE = 22
         private const val REQ_ALBUM_IMAGES = 23
         private const val REQ_ALBUM_MUSIC = 24
+        private const val REQ_BACKUP_SAVE = 25
+        private const val REQ_BACKUP_LOAD = 26
         private const val IDLE_MS = 2 * 60_000L
         /** سبز فسفری کم‌رنگ برای استان و شهر انتخاب‌شده. */
         private val SELECTED_GREEN = Color.rgb(0x9C, 0xF0, 0x8A)
